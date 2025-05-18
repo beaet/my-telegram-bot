@@ -1,18 +1,16 @@
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 
-const token = '5344559517:AAGRRHJkUVdnMPq1KE5g7DLRK6E2X2X-2Ok';
+const token = 'توکن_ربات_تو_اینجا';
 const url = 'https://my-telegram-bot-albl.onrender.com';
 const port = process.env.PORT || 3000;
 
-// ساخت ربات با وبهوک
-const bot = new TelegramBot(token, { webHook: true });
+const bot = new TelegramBot(token);
 bot.setWebHook(`${url}/bot${token}`);
 
 const app = express();
 app.use(express.json());
 
-// دریافت آپدیت از تلگرام
 app.post(`/bot${token}`, (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
@@ -21,12 +19,14 @@ app.post(`/bot${token}`, (req, res) => {
 const userState = {};
 
 bot.onText(/\/start/, (msg) => {
+  console.log("Got /start from:", msg.chat.id);
   const chatId = msg.chat.id;
   userState[chatId] = {};
   bot.sendMessage(chatId, "سلام به ربات محاسبه گر ریت موبایل لجند خوش اومدی. من میتونم به طور دقیق بهت بگم که برای رسیدن به ریتی که میخوای باید چند دست وین کنی! برای شروع فقط کافیه تعداد مچ هات رو به صورت عدد بهم بگی");
 });
 
 bot.on('message', (msg) => {
+  console.log("Got message:", msg.text);
   const chatId = msg.chat.id;
   const text = msg.text;
 
