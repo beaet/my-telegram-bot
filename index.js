@@ -1,8 +1,8 @@
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 
-const token = 'توکن_ربات_تو_اینجا';
-const url = 'https://my-telegram-bot-albl.onrender.com';
+const token = '5344559517:AAGRRHJkUVdnMPq1KE5g7DLRK6E2X2C-2Ok';  // توکن خودت
+const url = 'https://my-telegram-bot-albl.onrender.com';          // آدرس پروژه رندر خودت
 const port = process.env.PORT || 3000;
 
 const bot = new TelegramBot(token);
@@ -19,14 +19,12 @@ app.post(`/bot${token}`, (req, res) => {
 const userState = {};
 
 bot.onText(/\/start/, (msg) => {
-  console.log("Got /start from:", msg.chat.id);
   const chatId = msg.chat.id;
   userState[chatId] = {};
-  bot.sendMessage(chatId, "سلام به ربات محاسبه گر ریت موبایل لجند خوش اومدی. من میتونم به طور دقیق بهت بگم که برای رسیدن به ریتی که میخوای باید چند دست وین کنی! برای شروع فقط کافیه تعداد مچ هات رو به صورت عدد بهم بگی");
+  bot.sendMessage(chatId, "سلام! ربات محاسبه‌گر ریت موبایل لجند فعال شد. لطفا تعداد مچ‌هایت را بفرست.");
 });
 
 bot.on('message', (msg) => {
-  console.log("Got message:", msg.text);
   const chatId = msg.chat.id;
   const text = msg.text;
 
@@ -37,10 +35,10 @@ bot.on('message', (msg) => {
   if (!state.totalMatches) {
     const n = parseInt(text);
     if (isNaN(n)) {
-      return bot.sendMessage(chatId, "فقط عدد وارد کن. چند تا مچ بازی کردی؟");
+      return bot.sendMessage(chatId, "لطفا فقط عدد وارد کن. چند تا مچ بازی کردی؟");
     }
     state.totalMatches = n;
-    return bot.sendMessage(chatId, "عالیه! ریت فعلیت چند درصده؟");
+    return bot.sendMessage(chatId, "عالی! ریت فعلیت چند درصده؟ (مثلا 60)");
   }
 
   if (!state.winRate) {
@@ -49,7 +47,7 @@ bot.on('message', (msg) => {
       return bot.sendMessage(chatId, "درصد ریت رو فقط عددی وارد کن.");
     }
     state.winRate = r;
-    return bot.sendMessage(chatId, "و میخوای که ریتت به چند درصد برسه؟");
+    return bot.sendMessage(chatId, "و میخوای ریتت به چند درصد برسه؟");
   }
 
   if (!state.targetRate) {
