@@ -1,13 +1,12 @@
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 
-const token = '5344559517:AAGRRHJkUVdnMPq1KE5g7DLRK6E2X2X-2Ok';  // توکن ربات تو
-
-const url = 'https://my-telegram-bot-albl.onrender.com';  // بعد از ساخت پروژه Render، این آدرس رو جایگزین کن
+const token = '5344559517:AAGRRHJkUVdnMPq1KE5g7DLRK6E2X2C-2Ok';  // توکن درست
+const url = 'https://my-telegram-bot-albl.onrender.com';  
 const port = process.env.PORT || 3000;
 
-const bot = new TelegramBot(token);
-bot.setWebHook(`${url}bot${token}`);
+const bot = new TelegramBot(token, { webHook: true });
+bot.setWebHook(`${url}/bot${token}`);
 
 const app = express();
 app.use(express.json());
