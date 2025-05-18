@@ -1,57 +1,79 @@
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
-const { Configuration, OpenAIApi } = require('openai');
 
-const token = '5344559517:AAGRRHJkUVdnMPq1KE5g7DLRK6E2X2C-2Ok';  // توکن تلگرام تو
-const url = 'https://my-telegram-bot-albl.onrender.com';       // آدرس پروژه Render تو
+const token = '5344559517:AAGRRHJkUVdnMPq1KE5g7DLRK6E2X2X-2Ok';
+const url = 'https://my-telegram-bot-albl.onrender.com';
 const port = process.env.PORT || 3000;
 
-const openaiApiKey = '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';
-
-const configuration = new Configuration({
-  apiKey: openaiApiKey,
-});
-const openai = new OpenAIApi(configuration);
-
-const bot = new TelegramBot(token, { webHook: true });
-bot.setWebHook(`${url}/bot${token}`);
+const bot = new TelegramBot(token);
+bot.setWebHook(${url}/bot${token});
 
 const app = express();
 app.use(express.json());
 
-app.post(`/bot${token}`, (req, res) => {
+app.post(/bot${token}, (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
 
+const userState = {};
+
 bot.onText(/\/start/, (msg) => {
-  bot.sendMessage(msg.chat.id, "سلام! بهم یه توضیح بده، برات عکس می‌سازم.");
+  const chatId = msg.chat.id;
+  userState[chatId] = {};
+  bot.sendMessage(chatId, "سلام به ربات محاسبه گر ریت موبایل لجند خوش اومدی. من میتونم به طور دقیق بهت بگم که برای رسیدن به ریتی که میخوای باید چند دست وین کنی! برای شروع فقط کافیه تعداد مچ هات رو به صورت عدد بهم بگی");
 });
 
-bot.on('message', async (msg) => {
+bot.on('message', (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
 
-  if (text.startsWith('/start')) return;
+  if (!userState[chatId]) return;
 
-  bot.sendMessage(chatId, "در حال ساخت عکس، صبر کن...");
+  const state = userState[chatId];
 
-  try {
-    const response = await openai.createImage({
-      prompt: text,
-      n: 1,
-      size: "512x512",
-    });
+  if (!state.totalMatches) {
+    const n = parseInt(text);
+    if (isNaN(n)) {
+      return bot.sendMessage(chatId, "فقط عدد وارد کن. چند تا مچ بازی کردی؟");
+    }
+    state.totalMatches = n;
+    return bot.sendMessage(chatId, "عالیه! ریت فعلیت چند درصده؟");
+  }
 
-    const imageUrl = response.data.data[0].url;
-    bot.sendPhoto(chatId, imageUrl);
+  if (!state.winRate) {
+    const r = parseFloat(text);
+    if (isNaN(r)) {
+      return bot.sendMessage(chatId, "درصد ریت رو فقط عددی وارد کن.");
+    }
+    state.winRate = r;
+    return bot.sendMessage(chatId, "و میخوای که ریتت به چند درصد برسه؟");
+  }
 
-  } catch (error) {
-    console.error(error);
-    bot.sendMessage(chatId, "متاسفانه نتونستم عکس بسازم.");
+  if (!state.targetRate) {
+    const t = parseFloat(text);
+    if (isNaN(t)) {
+      return bot.sendMessage(chatId, "درصد هدف ریت رو عددی وارد کن.");
+    }
+    state.targetRate = t;
+
+    const { totalMatches, winRate, targetRate } = state;
+    const currentWins = totalMatches * winRate / 100;
+
+    const requiredWins = ((targetRate / 100) * totalMatches - currentWins) / (1 - targetRate / 100);
+    const x = Math.ceil(requiredWins);
+
+    if (x <= 0) {
+      bot.sendMessage(chatId, "ریت فعلیت از هدف بیشتره یا خیلی نزدیکشه. نیازی به برد بیشتر نیست!");
+    } else {
+      bot.sendMessage(chatId, برای رسیدن به ${targetRate}% ریت، باید ${x} بازی پشت سر هم ببری!);
+    }
+
+    delete userState[chatId];
   }
 });
 
 app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
+  console.log(Server running on port ${port});
 });
+``
