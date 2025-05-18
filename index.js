@@ -5,13 +5,15 @@ const token = '5344559517:AAGRRHJkUVdnMPq1KE5g7DLRK6E2X2X-2Ok';
 const url = 'https://my-telegram-bot-albl.onrender.com';
 const port = process.env.PORT || 3000;
 
-const bot = new TelegramBot(token);
-bot.setWebHook(${url}/bot${token});
+// ساخت ربات با وبهوک
+const bot = new TelegramBot(token, { webHook: true });
+bot.setWebHook(`${url}/bot${token}`);
 
 const app = express();
 app.use(express.json());
 
-app.post(/bot${token}, (req, res) => {
+// دریافت آپدیت از تلگرام
+app.post(`/bot${token}`, (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
@@ -66,7 +68,7 @@ bot.on('message', (msg) => {
     if (x <= 0) {
       bot.sendMessage(chatId, "ریت فعلیت از هدف بیشتره یا خیلی نزدیکشه. نیازی به برد بیشتر نیست!");
     } else {
-      bot.sendMessage(chatId, برای رسیدن به ${targetRate}% ریت، باید ${x} بازی پشت سر هم ببری!);
+      bot.sendMessage(chatId, `برای رسیدن به ${targetRate}% ریت، باید ${x} بازی پشت سر هم ببری!`);
     }
 
     delete userState[chatId];
@@ -74,6 +76,5 @@ bot.on('message', (msg) => {
 });
 
 app.listen(port, () => {
-  console.log(Server running on port ${port});
+  console.log(`Server running on port ${port}`);
 });
-``
