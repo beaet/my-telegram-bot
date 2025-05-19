@@ -2,9 +2,9 @@ const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 
-const token = '1077501291:AAGleB88hdBlRKxG6-wGRbK2z6-kCXC_Bcs';
-const adminPanelId = 381183017;  // آیدی عددی مدیر پنل
-const url = 'https://my-telegram-bot-albl.onrender.com'; // آدرس ربات شما در Render
+const token = '8129314550:AAFQTvL8VVg-4QtQD8QLY03LCWiSP1uaCak';
+const adminPanelId = 381183017;
+const url = 'https://my-telegram-bot-albl.onrender.com';
 const port = process.env.PORT || 3000;
 
 const bot = new TelegramBot(token);
@@ -13,18 +13,11 @@ bot.setWebHook(`${url}/bot${token}`);
 const app = express();
 app.use(express.json());
 
-// Health check endpoint برای Render
-app.get('/health', (req, res) => {
-  res.sendStatus(200);
-});
-
-// دیتابیس SQLite
 const db = new sqlite3.Database('./botdata.sqlite', (err) => {
-  if (err) return console.error('DB error:', err.message);
+  if (err) return console.error(err.message);
   console.log('Connected to SQLite database');
 });
 
-// ساخت جداول اگر موجود نیستند
 db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS users (
     chat_id INTEGER PRIMARY KEY,
@@ -50,7 +43,6 @@ db.serialize(() => {
 
 const userState = {};
 
-// توابع کمکی
 function getSetting(key) {
   return new Promise((resolve, reject) => {
     db.get(`SELECT value FROM settings WHERE key = ?`, [key], (err, row) => {
@@ -62,8 +54,7 @@ function getSetting(key) {
 
 function setSetting(key, value) {
   return new Promise((resolve, reject) => {
-    db.run(`INSERT INTO settings (key, value) VALUES (?, ?) 
-            ON CONFLICT(key) DO UPDATE SET value=excluded.value`, [key, value], (err) => {
+    db.run(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, [key, value], (err) => {
       if (err) return reject(err);
       resolve();
     });
@@ -71,8 +62,7 @@ function setSetting(key, value) {
 }
 
 function addOrUpdateUser(chatId, username) {
-  db.run(`INSERT INTO users(chat_id, username) VALUES(?, ?) 
-          ON CONFLICT(chat_id) DO UPDATE SET username=excluded.username`, [chatId, username]);
+  db.run(`INSERT INTO users(chat_id, username) VALUES(?, ?) ON CONFLICT(chat_id) DO UPDATE SET username=excluded.username`, [chatId, username]);
 }
 
 async function isAdmin(chatId, userId) {
@@ -84,55 +74,117 @@ async function isAdmin(chatId, userId) {
   }
 }
 
-// وبهوک برای دریافت آپدیت
 app.post(`/bot${token}`, (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
 
-// دستورها
-
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
   addOrUpdateUser(chatId, msg.from.username || '');
-  bot.sendMessage(chatId, "سلام! من ربات مدیریت گروه هستم. برای دیدن دستورات /help رو بزن.");
+  const keyboard = {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "محاسبه ریت موبایل لجند", callback_data: "calc_rate" }],
+        [{ text: "چند دست بردم چند دست باختم؟", callback_data: "calc_wins_losses" }]
+      ]
+    }
+  };
+  await bot.sendMessage(chatId, "سلام! من ربات محاسبه‌گر ریت هستم. انتخاب کنید:", keyboard);
 });
 
-bot.onText(/\/help/, async (msg) => {
+bot.on('callback_query', async (callbackQuery) => {
+  const msg = callbackQuery.message;
+  const userId = callbackQuery.from.id;
+  const data = callbackQuery.data;
+
+  if (data === 'calc_rate') {
+    bot.sendMessage(msg.chat.id, "لطفا تعداد مچ‌هایت را وارد کن.");
+    userState[userId] = { action: 'calc_rate' };
+  } else if (data === 'calc_wins_losses') {
+    bot.sendMessage(msg.chat.id, "لطفا تعداد مچ‌هایت را وارد کن.");
+    userState[userId] = { action: 'calc_wins_losses' };
+  }
+});
+
+bot.on('message', async (msg) => {
+  const userId = msg.from.id;
   const chatId = msg.chat.id;
-  const helpText = `
-دستورات ربات:
+  const text = msg.text;
 
-/start - شروع کار با ربات
-/menu - منوی مدیریت گروه (فقط ادمین‌ها)
-/panel - پنل مدیریت ربات (فقط مدیر مشخص شده)
-/mute [ریپلای] - ساکت کردن فرد
-/unmute [ریپلای] - باز کردن سکوت فرد
-/kick [ریپلای] - اخراج فرد
-/setwelcome [متن] - تنظیم پیام خوش‌آمدگویی (در پنل)
-/showsettings - نمایش پیام‌های فعلی تنظیم شده (در پنل)
+  if (!userState[userId]) return;
 
-و...
+  const state = userState[userId];
 
-برای اطلاعات بیشتر با پشتیبانی تماس بگیرید.
-  `;
-  await bot.sendMessage(chatId, helpText);
+  if (state.action === 'calc_rate') {
+    const totalMatches = parseInt(text);
+    if (isNaN(totalMatches)) {
+      return bot.sendMessage(chatId, "لطفا فقط عدد وارد کن.");
+    }
+    state.totalMatches = totalMatches;
+    bot.sendMessage(chatId, "عالی! ریت فعلیت چند درصده؟");
+    state.action = 'calc_rate_win_rate';
+  } else if (state.action === 'calc_rate_win_rate') {
+    const winRate = parseFloat(text);
+    if (isNaN(winRate)) {
+      return bot.sendMessage(chatId, "درصد ریت رو فقط عددی وارد کن.");
+    }
+    state.winRate = winRate;
+    bot.sendMessage(chatId, "و میخوای ریتت به چند درصد برسه؟");
+    state.action = 'calc_rate_target_rate';
+  } else if (state.action === 'calc_rate_target_rate') {
+    const targetRate = parseFloat(text);
+    if (isNaN(targetRate)) {
+      return bot.sendMessage(chatId, "درصد هدف ریت رو عددی وارد کن.");
+    }
+    state.targetRate = targetRate;
+
+    const currentWins = state.totalMatches * state.winRate / 100;
+    const requiredWins = ((state.targetRate / 100) * state.totalMatches - currentWins) / (1 - state.targetRate / 100);
+    const x = Math.ceil(requiredWins);
+
+    if (x <= 0) {
+      bot.sendMessage(chatId, "ریت فعلیت از هدف بیشتره یا خیلی نزدیکشه. نیازی به برد بیشتر نیست!");
+    } else {
+      bot.sendMessage(chatId, `برای رسیدن به ${state.targetRate}% ریت، باید ${x} بازی پشت سر هم ببری!`);
+    }
+
+    delete userState[userId];
+  } else if (state.action === 'calc_wins_losses') {
+    const totalMatches = parseInt(text);
+    if (isNaN(totalMatches)) {
+      return bot.sendMessage(chatId, "لطفا فقط عدد وارد کن.");
+    }
+    state.totalMatches = totalMatches;
+    bot.sendMessage(chatId, "عالی! ریت فعلیت چند درصده؟");
+    state.action = 'calc_wins_losses_win_rate';
+  } else if (state.action === 'calc_wins_losses_win_rate') {
+    const winRate = parseFloat(text);
+    if (isNaN(winRate)) {
+      return bot.sendMessage(chatId, "درصد ریت رو فقط عددی وارد کن.");
+    }
+    state.winRate = winRate;
+
+    const currentWins = state.totalMatches * state.winRate / 100;
+    const currentLosses = state.totalMatches - currentWins;
+
+    bot.sendMessage(chatId, `تا به الان ${Math.round(currentWins)} دست بردی و ${Math.round(currentLosses)} دست باختی.`);
+    delete userState[userId];
+  }
 });
 
-// پنل مدیریتی فقط برای آیدی مشخص شده
 bot.onText(/\/panel/, async (msg) => {
   if (msg.from.id !== adminPanelId) {
-    return bot.sendMessage(msg.chat.id, "شما اجازه دسترسی به پنل مدیریتی را ندارید.");
+    return bot.sendMessage(msg.chat.id, "شما اجازه دسترسی به پنل مدیریتی رو ندارید.");
   }
 
   const keyboard = {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "آمار کاربران", callback_data: "stats" }],
         [{ text: "تنظیم پیام خوش‌آمد", callback_data: "edit_welcome" }],
         [{ text: "تنظیم پیام سکوت", callback_data: "edit_mute" }],
         [{ text: "تنظیم پیام اخراج", callback_data: "edit_kick" }],
-        [{ text: "نمایش پیام‌های فعلی", callback_data: "show_settings" }]
+        [{ text: "ارسال پیام به همه کاربران", callback_data: "send_to_all" }]
       ]
     }
   };
@@ -140,7 +192,6 @@ bot.onText(/\/panel/, async (msg) => {
   await bot.sendMessage(msg.chat.id, "پنل مدیریت ربات:", keyboard);
 });
 
-// هندل کال‌بک‌ها
 bot.on('callback_query', async (callbackQuery) => {
   const msg = callbackQuery.message;
   const userId = callbackQuery.from.id;
@@ -150,36 +201,21 @@ bot.on('callback_query', async (callbackQuery) => {
     return bot.answerCallbackQuery(callbackQuery.id, { text: "دسترسی ندارید." });
   }
 
-  if (data === 'stats') {
-    db.get(`SELECT COUNT(*) as count FROM users`, [], (err, row) => {
-      if (err) return bot.sendMessage(msg.chat.id, "خطا در دریافت آمار.");
-      bot.sendMessage(msg.chat.id, `تعداد کل کاربران ثبت شده: ${row.count}`);
-    });
-  }
-  else if (data.startsWith('edit_')) {
+  if (data === 'edit_welcome' || data === 'edit_mute' || data === 'edit_kick') {
     const key = data.replace('edit_', '');
     bot.sendMessage(msg.chat.id, `لطفا متن جدید برای پیام "${key}" را ارسال کنید:`);
     userState[userId] = { action: 'edit_setting', key };
-  }
-  else if (data === 'show_settings') {
-    db.all(`SELECT key, value FROM settings`, [], (err, rows) => {
-      if (err) return bot.sendMessage(msg.chat.id, "خطا در دریافت تنظیمات.");
-      let text = "پیام‌های فعلی:\n";
-      rows.forEach(row => {
-        text += `${row.key}: ${row.value}\n\n`;
-      });
-      bot.sendMessage(msg.chat.id, text);
-    });
+  } else if (data === 'send_to_all') {
+    bot.sendMessage(msg.chat.id, "لطفا پیام مورد نظر را ارسال کنید:");
+    userState[userId] = { action: 'send_to_all' };
   }
 
   bot.answerCallbackQuery(callbackQuery.id);
 });
 
-// دریافت پیام برای ویرایش پیام‌ها در پنل
 bot.on('message', async (msg) => {
   const userId = msg.from.id;
 
-  // اگر در حالت ویرایش پیام هستیم
   if (userState[userId] && userState[userId].action === 'edit_setting') {
     const key = userState[userId].key;
     const newValue = msg.text;
@@ -187,79 +223,21 @@ bot.on('message', async (msg) => {
     await setSetting(key, newValue);
     await bot.sendMessage(msg.chat.id, `پیام ${key} با موفقیت به‌روزرسانی شد.`);
     delete userState[userId];
-    return;
+  } else if (userState[userId] && userState[userId].action === 'send_to_all') {
+    const message = msg.text;
+
+    db.all(`SELECT chat_id FROM users`, [], (err, rows) => {
+      if (err) return bot.sendMessage(msg.chat.id, "خطا در ارسال پیام.");
+      rows.forEach(row => {
+        bot.sendMessage(row.chat_id, message);
+      });
+    });
+
+    await bot.sendMessage(msg.chat.id, "پیام با موفقیت به همه کاربران ارسال شد.");
+    delete userState[userId];
   }
 });
 
-// مثال دستور mute (فقط ادمین‌ها)
-bot.onText(/\/mute/, async (msg) => {
-  if (msg.chat.type === 'private') return;
-  const fromId = msg.from.id;
-  const chatId = msg.chat.id;
-
-  const isUserAdmin = await isAdmin(chatId, fromId);
-  if (!isUserAdmin) return;
-
-  if (!msg.reply_to_message) {
-    return bot.sendMessage(chatId, "برای ساکت کردن، روی پیام فرد ریپلای کنید.");
-  }
-
-  const targetId = msg.reply_to_message.from.id;
-  try {
-    await bot.restrictChatMember(chatId, targetId, { can_send_messages: false });
-    const muteMsg = await getSetting('mute');
-    bot.sendMessage(chatId, muteMsg);
-  } catch {
-    bot.sendMessage(chatId, "خطا در ساکت کردن فرد.");
-  }
-});
-
-// دستور unmute
-bot.onText(/\/unmute/, async (msg) => {
-  if (msg.chat.type === 'private') return;
-  const fromId = msg.from.id;
-  const chatId = msg.chat.id;
-
-  const isUserAdmin = await isAdmin(chatId, fromId);
-  if (!isUserAdmin) return;
-
-  if (!msg.reply_to_message) {
-    return bot.sendMessage(chatId, "برای باز کردن سکوت، روی پیام فرد ریپلای کنید.");
-  }
-
-  const targetId = msg.reply_to_message.from.id;
-  try {
-    await bot.restrictChatMember(chatId, targetId, { can_send_messages: true, can_send_media_messages: true, can_send_other_messages: true, can_add_web_page_previews: true });
-    bot.sendMessage(chatId, "سکوت فرد برداشته شد.");
-  } catch {
-    bot.sendMessage(chatId, "خطا در باز کردن سکوت.");
-  }
-});
-
-// دستور kick
-bot.onText(/\/kick/, async (msg) => {
-  if (msg.chat.type === 'private') return;
-  const fromId = msg.from.id;
-  const chatId = msg.chat.id;
-
-  const isUserAdmin = await isAdmin(chatId, fromId);
-  if (!isUserAdmin) return;
-
-  if (!msg.reply_to_message) {
-    return bot.sendMessage(chatId, "برای اخراج، روی پیام فرد ریپلای کنید.");
-  }
-
-  const targetId = msg.reply_to_message.from.id;
-  try {
-    await bot.kickChatMember(chatId, targetId);
-    const kickMsg = await getSetting('kick');
-    bot.sendMessage(chatId, kickMsg);
-  } catch {
-    bot.sendMessage(chatId, "خطا در اخراج فرد.");
-  }
-});
-
-// سرور گوش میده
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
