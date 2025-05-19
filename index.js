@@ -3,8 +3,8 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 
 const token = '1077501291:AAGleB88hdBlRKxG6-wGRbK2z6-kCXC_Bcs';
-const adminPanelId = 381183017;  // آیدی عددی ادمین پنل مدیریتی
-const url = 'https://my-telegram-bot-albl.onrender.com'; // آدرس ربات شما
+const adminPanelId = 381183017;  // آیدی عددی مدیر پنل
+const url = 'https://my-telegram-bot-albl.onrender.com'; // آدرس ربات شما در Render
 const port = process.env.PORT || 3000;
 
 const bot = new TelegramBot(token);
@@ -13,13 +13,18 @@ bot.setWebHook(`${url}/bot${token}`);
 const app = express();
 app.use(express.json());
 
+// Health check endpoint برای Render
+app.get('/health', (req, res) => {
+  res.sendStatus(200);
+});
+
 // دیتابیس SQLite
 const db = new sqlite3.Database('./botdata.sqlite', (err) => {
-  if (err) return console.error(err.message);
+  if (err) return console.error('DB error:', err.message);
   console.log('Connected to SQLite database');
 });
 
-// ساخت جداول در دیتابیس اگر وجود نداشته باشند
+// ساخت جداول اگر موجود نیستند
 db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS users (
     chat_id INTEGER PRIMARY KEY,
@@ -32,7 +37,6 @@ db.serialize(() => {
     value TEXT
   )`);
 
-  // مقدار پیش فرض پیام‌ها
   const defaultMessages = {
     welcome: "سلام به گروه خوش آمدید!",
     mute: "شما ساکت شده‌اید.",
@@ -44,9 +48,9 @@ db.serialize(() => {
   }
 });
 
-const userState = {}; // ذخیره وضعیت موقتی کاربران
+const userState = {};
 
-// کمکی برای خواندن مقدار از تنظیمات دیتابیس
+// توابع کمکی
 function getSetting(key) {
   return new Promise((resolve, reject) => {
     db.get(`SELECT value FROM settings WHERE key = ?`, [key], (err, row) => {
@@ -56,22 +60,21 @@ function getSetting(key) {
   });
 }
 
-// کمکی برای تغییر مقدار تنظیمات
 function setSetting(key, value) {
   return new Promise((resolve, reject) => {
-    db.run(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, [key, value], (err) => {
+    db.run(`INSERT INTO settings (key, value) VALUES (?, ?) 
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value`, [key, value], (err) => {
       if (err) return reject(err);
       resolve();
     });
   });
 }
 
-// ثبت کاربر در دیتابیس و به روزرسانی نام کاربری
 function addOrUpdateUser(chatId, username) {
-  db.run(`INSERT INTO users(chat_id, username) VALUES(?, ?) ON CONFLICT(chat_id) DO UPDATE SET username=excluded.username`, [chatId, username]);
+  db.run(`INSERT INTO users(chat_id, username) VALUES(?, ?) 
+          ON CONFLICT(chat_id) DO UPDATE SET username=excluded.username`, [chatId, username]);
 }
 
-// چک کردن ادمین بودن کاربر در گروه (از API تلگرام)
 async function isAdmin(chatId, userId) {
   try {
     const admins = await bot.getChatAdministrators(chatId);
@@ -81,13 +84,20 @@ async function isAdmin(chatId, userId) {
   }
 }
 
-// وبهوک برای دریافت آپدیت‌ها
+// وبهوک برای دریافت آپدیت
 app.post(`/bot${token}`, (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
 
-// دریافت منو و راهنما
+// دستورها
+
+bot.onText(/\/start/, async (msg) => {
+  const chatId = msg.chat.id;
+  addOrUpdateUser(chatId, msg.from.username || '');
+  bot.sendMessage(chatId, "سلام! من ربات مدیریت گروه هستم. برای دیدن دستورات /help رو بزن.");
+});
+
 bot.onText(/\/help/, async (msg) => {
   const chatId = msg.chat.id;
   const helpText = `
@@ -95,32 +105,24 @@ bot.onText(/\/help/, async (msg) => {
 
 /start - شروع کار با ربات
 /menu - منوی مدیریت گروه (فقط ادمین‌ها)
-/panel - پنل مدیریت ربات (فقط کاربر خاص)
+/panel - پنل مدیریت ربات (فقط مدیر مشخص شده)
 /mute [ریپلای] - ساکت کردن فرد
 /unmute [ریپلای] - باز کردن سکوت فرد
-/kick [ریپلای یا آیدی] - اخراج فرد
-/setwelcome [متن] - تنظیم پیام خوش‌آمدگویی (پنل)
-/showsettings - نمایش پیام‌های فعلی تنظیم شده (پنل)
+/kick [ریپلای] - اخراج فرد
+/setwelcome [متن] - تنظیم پیام خوش‌آمدگویی (در پنل)
+/showsettings - نمایش پیام‌های فعلی تنظیم شده (در پنل)
 
 و...
 
-برای دریافت راهنمای کامل به آیدی @YourSupportBot پیام دهید.
+برای اطلاعات بیشتر با پشتیبانی تماس بگیرید.
   `;
   await bot.sendMessage(chatId, helpText);
 });
 
-// شروع ربات
-bot.onText(/\/start/, async (msg) => {
-  const chatId = msg.chat.id;
-  addOrUpdateUser(chatId, msg.from.username || '');
-
-  bot.sendMessage(chatId, "سلام! من ربات مدیریت گروه هستم. برای دیدن دستورات /help رو بزن.");
-});
-
-// پنل مدیریتی فقط برای ادمین مشخص شده
+// پنل مدیریتی فقط برای آیدی مشخص شده
 bot.onText(/\/panel/, async (msg) => {
   if (msg.from.id !== adminPanelId) {
-    return bot.sendMessage(msg.chat.id, "شما اجازه دسترسی به پنل مدیریتی رو ندارید.");
+    return bot.sendMessage(msg.chat.id, "شما اجازه دسترسی به پنل مدیریتی را ندارید.");
   }
 
   const keyboard = {
@@ -138,7 +140,7 @@ bot.onText(/\/panel/, async (msg) => {
   await bot.sendMessage(msg.chat.id, "پنل مدیریت ربات:", keyboard);
 });
 
-// هندل کال‌بک‌ها برای پنل مدیریتی
+// هندل کال‌بک‌ها
 bot.on('callback_query', async (callbackQuery) => {
   const msg = callbackQuery.message;
   const userId = callbackQuery.from.id;
@@ -157,7 +159,6 @@ bot.on('callback_query', async (callbackQuery) => {
   else if (data.startsWith('edit_')) {
     const key = data.replace('edit_', '');
     bot.sendMessage(msg.chat.id, `لطفا متن جدید برای پیام "${key}" را ارسال کنید:`);
-
     userState[userId] = { action: 'edit_setting', key };
   }
   else if (data === 'show_settings') {
@@ -190,33 +191,30 @@ bot.on('message', async (msg) => {
   }
 });
 
-// دستورهای مدیریتی در گروه (فقط ادمین‌ها اجازه دارند)
-// /mute [ریپلای]
+// مثال دستور mute (فقط ادمین‌ها)
 bot.onText(/\/mute/, async (msg) => {
-  if (msg.chat.type === 'private') return; // فقط در گروه
+  if (msg.chat.type === 'private') return;
   const fromId = msg.from.id;
   const chatId = msg.chat.id;
 
   const isUserAdmin = await isAdmin(chatId, fromId);
   if (!isUserAdmin) return;
 
-  let targetId;
-  if (msg.reply_to_message) {
-    targetId = msg.reply_to_message.from.id;
-  } else {
-    return bot.sendMessage(chatId, "برای میوت کردن باید روی پیام فرد ریپلای کنید.");
+  if (!msg.reply_to_message) {
+    return bot.sendMessage(chatId, "برای ساکت کردن، روی پیام فرد ریپلای کنید.");
   }
 
+  const targetId = msg.reply_to_message.from.id;
   try {
     await bot.restrictChatMember(chatId, targetId, { can_send_messages: false });
     const muteMsg = await getSetting('mute');
-    bot.sendMessage(chatId, `${muteMsg}`);
-  } catch (e) {
-    bot.sendMessage(chatId, "خطا در میوت کردن کاربر.");
+    bot.sendMessage(chatId, muteMsg);
+  } catch {
+    bot.sendMessage(chatId, "خطا در ساکت کردن فرد.");
   }
 });
 
-// /unmute [ریپلای]
+// دستور unmute
 bot.onText(/\/unmute/, async (msg) => {
   if (msg.chat.type === 'private') return;
   const fromId = msg.from.id;
@@ -225,27 +223,20 @@ bot.onText(/\/unmute/, async (msg) => {
   const isUserAdmin = await isAdmin(chatId, fromId);
   if (!isUserAdmin) return;
 
-  let targetId;
-  if (msg.reply_to_message) {
-    targetId = msg.reply_to_message.from.id;
-  } else {
-    return bot.sendMessage(chatId, "برای باز کردن سکوت باید روی پیام فرد ریپلای کنید.");
+  if (!msg.reply_to_message) {
+    return bot.sendMessage(chatId, "برای باز کردن سکوت، روی پیام فرد ریپلای کنید.");
   }
 
+  const targetId = msg.reply_to_message.from.id;
   try {
-    await bot.restrictChatMember(chatId, targetId, {
-      can_send_messages: true,
-      can_send_media_messages: true,
-      can_send_other_messages: true,
-      can_add_web_page_previews: true
-    });
+    await bot.restrictChatMember(chatId, targetId, { can_send_messages: true, can_send_media_messages: true, can_send_other_messages: true, can_add_web_page_previews: true });
     bot.sendMessage(chatId, "سکوت فرد برداشته شد.");
-  } catch (e) {
-    bot.sendMessage(chatId, "خطا در باز کردن سکوت کاربر.");
+  } catch {
+    bot.sendMessage(chatId, "خطا در باز کردن سکوت.");
   }
 });
 
-// /kick [ریپلای یا آیدی]
+// دستور kick
 bot.onText(/\/kick/, async (msg) => {
   if (msg.chat.type === 'private') return;
   const fromId = msg.from.id;
@@ -254,25 +245,21 @@ bot.onText(/\/kick/, async (msg) => {
   const isUserAdmin = await isAdmin(chatId, fromId);
   if (!isUserAdmin) return;
 
-  let targetId;
-  if (msg.reply_to_message) {
-    targetId = msg.reply_to_message.from.id;
-  } else if (msg.text.split(' ')[1]) {
-    targetId = parseInt(msg.text.split(' ')[1]);
-  } else {
-    return bot.sendMessage(chatId, "برای اخراج باید روی پیام فرد ریپلای کنید یا آیدی عددی او را وارد کنید.");
+  if (!msg.reply_to_message) {
+    return bot.sendMessage(chatId, "برای اخراج، روی پیام فرد ریپلای کنید.");
   }
 
+  const targetId = msg.reply_to_message.from.id;
   try {
     await bot.kickChatMember(chatId, targetId);
     const kickMsg = await getSetting('kick');
-    bot.sendMessage(chatId, `${kickMsg}`);
-  } catch (e) {
-    bot.sendMessage(chatId, "خطا در اخراج کاربر.");
+    bot.sendMessage(chatId, kickMsg);
+  } catch {
+    bot.sendMessage(chatId, "خطا در اخراج فرد.");
   }
 });
 
-// راه‌اندازی سرور express و گوش دادن به پورت
+// سرور گوش میده
 app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
+  console.log(`Server running on port ${port}`);
 });
