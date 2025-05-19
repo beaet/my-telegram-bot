@@ -3,8 +3,8 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 
 const token = '1077501291:AAGleB88hdBlRKxG6-wGRbK2z6-kCXC_Bcs';
-const adminPanelId = 381183017;  // آیدی ادمین پنل مدیریتی
-const url = 'https://my-telegram-bot-albl.onrender.com'; // URL ربات شما
+const adminPanelId = 381183017;  // آیدی عددی ادمین پنل مدیریتی
+const url = 'https://my-telegram-bot-albl.onrender.com'; // آدرس ربات شما
 const port = process.env.PORT || 3000;
 
 const bot = new TelegramBot(token);
@@ -98,7 +98,7 @@ bot.onText(/\/help/, async (msg) => {
 /panel - پنل مدیریت ربات (فقط کاربر خاص)
 /mute [ریپلای] - ساکت کردن فرد
 /unmute [ریپلای] - باز کردن سکوت فرد
-/kick [ریپلای] - اخراج فرد
+/kick [ریپلای یا آیدی] - اخراج فرد
 /setwelcome [متن] - تنظیم پیام خوش‌آمدگویی (پنل)
 /showsettings - نمایش پیام‌های فعلی تنظیم شده (پنل)
 
@@ -191,7 +191,7 @@ bot.on('message', async (msg) => {
 });
 
 // دستورهای مدیریتی در گروه (فقط ادمین‌ها اجازه دارند)
-// مثال: /mute [ریپلای]
+// /mute [ریپلای]
 bot.onText(/\/mute/, async (msg) => {
   if (msg.chat.type === 'private') return; // فقط در گروه
   const fromId = msg.from.id;
@@ -216,8 +216,63 @@ bot.onText(/\/mute/, async (msg) => {
   }
 });
 
-// دستور unmute
+// /unmute [ریپلای]
 bot.onText(/\/unmute/, async (msg) => {
   if (msg.chat.type === 'private') return;
   const fromId = msg.from.id;
-  const chatId = msg
+  const chatId = msg.chat.id;
+
+  const isUserAdmin = await isAdmin(chatId, fromId);
+  if (!isUserAdmin) return;
+
+  let targetId;
+  if (msg.reply_to_message) {
+    targetId = msg.reply_to_message.from.id;
+  } else {
+    return bot.sendMessage(chatId, "برای باز کردن سکوت باید روی پیام فرد ریپلای کنید.");
+  }
+
+  try {
+    await bot.restrictChatMember(chatId, targetId, {
+      can_send_messages: true,
+      can_send_media_messages: true,
+      can_send_other_messages: true,
+      can_add_web_page_previews: true
+    });
+    bot.sendMessage(chatId, "سکوت فرد برداشته شد.");
+  } catch (e) {
+    bot.sendMessage(chatId, "خطا در باز کردن سکوت کاربر.");
+  }
+});
+
+// /kick [ریپلای یا آیدی]
+bot.onText(/\/kick/, async (msg) => {
+  if (msg.chat.type === 'private') return;
+  const fromId = msg.from.id;
+  const chatId = msg.chat.id;
+
+  const isUserAdmin = await isAdmin(chatId, fromId);
+  if (!isUserAdmin) return;
+
+  let targetId;
+  if (msg.reply_to_message) {
+    targetId = msg.reply_to_message.from.id;
+  } else if (msg.text.split(' ')[1]) {
+    targetId = parseInt(msg.text.split(' ')[1]);
+  } else {
+    return bot.sendMessage(chatId, "برای اخراج باید روی پیام فرد ریپلای کنید یا آیدی عددی او را وارد کنید.");
+  }
+
+  try {
+    await bot.kickChatMember(chatId, targetId);
+    const kickMsg = await getSetting('kick');
+    bot.sendMessage(chatId, `${kickMsg}`);
+  } catch (e) {
+    bot.sendMessage(chatId, "خطا در اخراج کاربر.");
+  }
+});
+
+// راه‌اندازی سرور express و گوش دادن به پورت
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
+});
