@@ -1,8 +1,10 @@
-const { Telegraf } = require('telegraf');
+const { Telegraf, session } = require('telegraf');
 const sqlite3 = require('sqlite3').verbose();
 
 const bot = new Telegraf('8129314550:AAFQTvL8VVg-4QtQD8QLY03LCWiSP1uaCak');
 const ADMIN_ID = 381183017;
+
+bot.use(session());
 
 // ساخت دیتابیس و جداول
 const db = new sqlite3.Database('./database.sqlite');
@@ -24,8 +26,7 @@ db.serialize(() => {
     id INTEGER PRIMARY KEY,
     start_message TEXT DEFAULT 'سلام! به ربات ما خوش آمدید.'
   )`);
-  
-  // یک ردیف تنظیمات اگر نیست، ایجاد کن
+
   db.get(`SELECT * FROM settings WHERE id = 1`, (err, row) => {
     if (!row) {
       db.run(`INSERT INTO settings (id, start_message) VALUES (1, 'سلام! به ربات ما خوش آمدید.')`);
@@ -54,12 +55,12 @@ function sendMainMenu(chatId) {
   });
 }
 
-// هنگام استارت و ثبت دعوت
-bot.start((ctx) => {
+// استارت و ثبت دعوت
+bot.start(async (ctx) => {
   const chatId = ctx.chat.id;
   const startPayload = ctx.startPayload;
 
-  // ثبت کاربر اگر قبلاً ثبت نشده
+  // ثبت کاربر جدید با ۵ شانس اولیه
   db.get(`SELECT * FROM users WHERE chat_id = ?`, [chatId], (err, user) => {
     if (err) return console.error(err);
     if (!user) {
@@ -67,16 +68,15 @@ bot.start((ctx) => {
     }
   });
 
-  // اگر پارامتر دعوت دارد
+  // ثبت دعوت اگر پارامتر start وجود داشته باشد و معتبر باشد
   if (startPayload) {
     const inviterId = parseInt(startPayload);
     if (!isNaN(inviterId) && inviterId !== chatId) {
-      // ثبت دعوت فقط اگر قبلاً دعوت نشده
       db.get(`SELECT * FROM invites WHERE invitee = ?`, [chatId], (err, inviteRow) => {
         if (!inviteRow) {
           db.run(`INSERT INTO invites (inviter, invitee) VALUES (?, ?)`, [inviterId, chatId], (err2) => {
             if (!err2) {
-              // ۵ شانس اضافه به دعوت کننده بده
+              // ۵ شانس اضافه دائمی برای دعوت کننده
               db.get(`SELECT extra_uses FROM users WHERE chat_id = ?`, [inviterId], (err3, inviterRow) => {
                 if (inviterRow) {
                   const newExtra = inviterRow.extra_uses + 5;
@@ -93,8 +93,9 @@ bot.start((ctx) => {
   sendMainMenu(chatId);
 });
 
-// میدلور چک بن بودن
+// میدلور بررسی بن بودن
 bot.use(async (ctx, next) => {
+  if (!ctx.chat) return next(); // بعضی آپدیت‌ها چت ندارند
   const chatId = ctx.chat.id;
   db.get(`SELECT banned_until FROM users WHERE chat_id = ?`, [chatId], (err, row) => {
     if (row && row.banned_until > Date.now()) {
@@ -105,10 +106,32 @@ bot.use(async (ctx, next) => {
   });
 });
 
-// شنیدن پیام‌ها و دکمه‌ها
+// پاسخ به پیام‌ها و دکمه‌ها
 bot.on('text', (ctx) => {
   const chatId = ctx.chat.id;
   const text = ctx.message.text;
+
+  // تابع کم کردن ۱ شانس از کاربران (اول از extra_uses، سپس uses_left)
+  function consumeChance(callback) {
+    db.get(`SELECT uses_left, extra_uses FROM users WHERE chat_id = ?`, [chatId], (err, user) => {
+      if (!user) {
+        callback(false);
+        return;
+      }
+      let { uses_left, extra_uses } = user;
+      if (extra_uses > 0) {
+        extra_uses--;
+        db.run(`UPDATE users SET extra_uses = ? WHERE chat_id = ?`, [extra_uses, chatId]);
+        callback(true);
+      } else if (uses_left > 0) {
+        uses_left--;
+        db.run(`UPDATE users SET uses_left = ? WHERE chat_id = ?`, [uses_left, chatId]);
+        callback(true);
+      } else {
+        callback(false);
+      }
+    });
+  }
 
   if (text === 'محاسبه ریت موبایل لجند') {
     db.get(`SELECT uses_left, extra_uses FROM users WHERE chat_id = ?`, [chatId], (err, user) => {
@@ -121,14 +144,13 @@ bot.on('text', (ctx) => {
         ctx.reply('شما شانس استفاده از این بخش را ندارید. برای افزایش شانس‌ها از بخش دعوت دوستان یا خرید شانس استفاده کنید.');
         return;
       }
-
       ctx.reply('لطفا ریت خود را به درصد وارد کنید:');
-      ctx.session = { action: 'get_rate' };
+      ctx.session.action = 'get_rate';
     });
   }
   else if (text === 'چند دست بردم چند دست باختم؟') {
     ctx.reply('لطفا تعداد کل مچ‌هایی که بازی کرده‌اید را وارد کنید:');
-    ctx.session = { action: 'get_matches' };
+    ctx.session.action = 'get_matches';
   }
   else if (text === 'اطلاعات من') {
     db.get(`SELECT COUNT(*) as cnt FROM invites WHERE inviter = ?`, [chatId], (err, row) => {
@@ -152,33 +174,24 @@ bot.on('text', (ctx) => {
   }
   else {
     // مدیریت ورودی‌های مرحله‌ای
-    if (ctx.session && ctx.session.action === 'get_rate') {
+    if (ctx.session.action === 'get_rate') {
       let rate = parseFloat(text.replace(',', '.'));
       if (isNaN(rate) || rate < 0 || rate > 100) {
         ctx.reply('لطفا یک عدد معتبر بین 0 تا 100 وارد کنید.');
         return;
       }
-
-      // کم کردن یک شانس کاربر
-      db.get(`SELECT uses_left, extra_uses FROM users WHERE chat_id = ?`, [chatId], (err, user) => {
-        if (!user) return;
-        let usesLeft = user.uses_left;
-        let extra = user.extra_uses;
-
-        if (extra > 0) {
-          extra -= 1;
-          db.run(`UPDATE users SET extra_uses = ? WHERE chat_id = ?`, [extra, chatId]);
-        } else if (usesLeft > 0) {
-          usesLeft -= 1;
-          db.run(`UPDATE users SET uses_left = ? WHERE chat_id = ?`, [usesLeft, chatId]);
+      consumeChance((success) => {
+        if (!success) {
+          ctx.reply('شانس استفاده ندارید. لطفا شانس‌های خود را افزایش دهید.');
+          ctx.session = null;
+          return;
         }
-
         ctx.reply(`شما ریت ${rate}% را وارد کردید.`);
         sendMainMenu(chatId);
         ctx.session = null;
       });
     }
-    else if (ctx.session && ctx.session.action === 'get_matches') {
+    else if (ctx.session.action === 'get_matches') {
       let matches = parseInt(text);
       if (isNaN(matches) || matches <= 0) {
         ctx.reply('لطفا تعداد مچ‌ها را به عدد صحیح وارد کنید.');
@@ -188,7 +201,7 @@ bot.on('text', (ctx) => {
       ctx.reply('لطفا ریت خود را به درصد وارد کنید:');
       ctx.session.action = 'get_rate_for_matches';
     }
-    else if (ctx.session && ctx.session.action === 'get_rate_for_matches') {
+    else if (ctx.session.action === 'get_rate_for_matches') {
       let rate = parseFloat(text.replace(',', '.'));
       if (isNaN(rate) || rate < 0 || rate > 100) {
         ctx.reply('لطفا یک عدد معتبر بین 0 تا 100 وارد کنید.');
@@ -196,25 +209,15 @@ bot.on('text', (ctx) => {
       }
 
       const matches = ctx.session.matches;
-
-      // محاسبه برد و باخت
       const wins = Math.round(matches * (rate / 100));
       const losses = matches - wins;
 
-      // کم کردن یک شانس کاربر
-      db.get(`SELECT uses_left, extra_uses FROM users WHERE chat_id = ?`, [chatId], (err, user) => {
-        if (!user) return;
-        let usesLeft = user.uses_left;
-        let extra = user.extra_uses;
-
-        if (extra > 0) {
-          extra -= 1;
-          db.run(`UPDATE users SET extra_uses = ? WHERE chat_id = ?`, [extra, chatId]);
-        } else if (usesLeft > 0) {
-          usesLeft -= 1;
-          db.run(`UPDATE users SET uses_left = ? WHERE chat_id = ?`, [usesLeft, chatId]);
+      consumeChance((success) => {
+        if (!success) {
+          ctx.reply('شانس استفاده ندارید. لطفا شانس‌های خود را افزایش دهید.');
+          ctx.session = null;
+          return;
         }
-
         ctx.reply(`شما تا الان ${wins} دست بردید و ${losses} دست باختید.`);
         sendMainMenu(chatId);
         ctx.session = null;
@@ -223,13 +226,12 @@ bot.on('text', (ctx) => {
   }
 });
 
-// مدیریت (فقط برای ADMIN_ID)
+// پنل مدیریت فقط برای ADMIN_ID
 bot.command('panel', (ctx) => {
   if (ctx.chat.id !== ADMIN_ID) {
     ctx.reply('شما دسترسی به پنل مدیریت ندارید.');
     return;
   }
-
   const keyboard = {
     reply_markup: {
       keyboard: [
@@ -245,11 +247,9 @@ bot.command('panel', (ctx) => {
       one_time_keyboard: false
     }
   };
-
   ctx.reply('به پنل مدیریت خوش آمدید:', keyboard);
 });
 
-// مدیریت بخش‌ها (شبیه سشن ساده برای پنل مدیریتی)
 const adminSession = {};
 
 bot.on('text', (ctx, next) => {
@@ -295,7 +295,6 @@ bot.on('text', (ctx, next) => {
     return;
   }
 
-  // مراحل بعدی هر بخش پنل
   const session = adminSession[ADMIN_ID];
 
   switch (session.step) {
@@ -321,101 +320,138 @@ bot.on('text', (ctx, next) => {
     case 'send_message_text':
       bot.telegram.sendMessage(session.targetUser, text)
         .then(() => ctx.reply('پیام با موفقیت ارسال شد.'))
-        .catch(() => ctx.reply('ارسال پیام به کاربر با خطا مواجه شد.'));
-      adminSession[ADMIN_ID] = null;
+        .catch(() => ctx.reply('ارسال پیام به کاربر با خطاا
+        
+        bot.telegram.sendMessage(session.targetUser, text)
+        .then(() => ctx.reply('پیام با موفقیت ارسال شد.'))
+        .catch(() => ctx.reply('ارسال پیام به کاربر با خطا رخ داد.'))
+        .finally(() => {
+          adminSession[ADMIN_ID] = null;
+        });
       break;
 
     case 'ban_user_permanent':
-      const banUserId = parseInt(text);
-      if (isNaN(banUserId)) {
-        ctx.reply('آیدی معتبر نیست. لطفا عدد وارد کنید.');
-        return;
+      {
+        const userIdBan = parseInt(text);
+        if (isNaN(userIdBan)) {
+          ctx.reply('آیدی معتبر نیست. لطفا عدد وارد کنید.');
+          return;
+        }
+        const forever = 32503680000000; // تاریخ خیلی دور آینده (سال 3000 میلادی)
+        db.get(`SELECT * FROM users WHERE chat_id = ?`, [userIdBan], (err, row) => {
+          if (!row) {
+            ctx.reply('کاربر یافت نشد.');
+            adminSession[ADMIN_ID] = null;
+            return;
+          }
+          db.run(`UPDATE users SET banned_until = ? WHERE chat_id = ?`, [forever, userIdBan], (err2) => {
+            if (!err2) ctx.reply('کاربر با موفقیت به صورت دائمی بن شد.');
+            else ctx.reply('خطا در بن کردن کاربر.');
+            adminSession[ADMIN_ID] = null;
+          });
+        });
       }
-      db.run(`UPDATE users SET banned_until = ? WHERE chat_id = ?`, [Infinity, banUserId], (err) => {
-        if (!err) ctx.reply('کاربر با موفقیت بن شد.');
-        else ctx.reply('خطا در بن کردن کاربر.');
-        adminSession[ADMIN_ID] = null;
-      });
       break;
 
     case 'ban_user_temporary_id':
-      const banTempUserId = parseInt(text);
-      if (isNaN(banTempUserId)) {
-        ctx.reply('آیدی معتبر نیست. لطفا عدد وارد کنید.');
-        return;
+      {
+        const userIdTempBan = parseInt(text);
+        if (isNaN(userIdTempBan)) {
+          ctx.reply('آیدی معتبر نیست. لطفا عدد وارد کنید.');
+          return;
+        }
+        session.targetUser = userIdTempBan;
+        session.step = 'ban_user_temporary_duration';
+        ctx.reply('مدت زمان بن (به دقیقه) را وارد کنید:');
       }
-      session.targetUser = banTempUserId;
-      session.step = 'ban_user_temporary_time';
-      ctx.reply('مدت زمان بن (به دقیقه) را وارد کنید:');
       break;
 
-    case 'ban_user_temporary_time':
-      const minutes = parseInt(text);
-      if (isNaN(minutes) || minutes <= 0) {
-        ctx.reply('لطفا یک عدد صحیح مثبت وارد کنید.');
-        return;
+    case 'ban_user_temporary_duration':
+      {
+        const durationMin = parseInt(text);
+        if (isNaN(durationMin) || durationMin <= 0) {
+          ctx.reply('مدت زمان معتبر نیست. لطفا عدد مثبت وارد کنید.');
+          return;
+        }
+        const bannedUntil = Date.now() + durationMin * 60 * 1000;
+        db.get(`SELECT * FROM users WHERE chat_id = ?`, [session.targetUser], (err, row) => {
+          if (!row) {
+            ctx.reply('کاربر یافت نشد.');
+            adminSession[ADMIN_ID] = null;
+            return;
+          }
+          db.run(`UPDATE users SET banned_until = ? WHERE chat_id = ?`, [bannedUntil, session.targetUser], (err2) => {
+            if (!err2) ctx.reply(`کاربر به مدت ${durationMin} دقیقه بن شد.`);
+            else ctx.reply('خطا در بن تایمی کاربر.');
+            adminSession[ADMIN_ID] = null;
+          });
+        });
       }
-      const banUntil = Date.now() + minutes * 60000;
-      db.run(`UPDATE users SET banned_until = ? WHERE chat_id = ?`, [banUntil, session.targetUser], (err) => {
-        if (!err) ctx.reply('کاربر به صورت موقت بن شد.');
-        else ctx.reply('خطا در بن کردن کاربر.');
-        adminSession[ADMIN_ID] = null;
-      });
       break;
 
     case 'unban_user':
-      const unbanUserId = parseInt(text);
-      if (isNaN(unbanUserId)) {
-        ctx.reply('آیدی معتبر نیست. لطفا عدد وارد کنید.');
-        return;
+      {
+        const userIdUnban = parseInt(text);
+        if (isNaN(userIdUnban)) {
+          ctx.reply('آیدی معتبر نیست. لطفا عدد وارد کنید.');
+          return;
+        }
+        db.get(`SELECT * FROM users WHERE chat_id = ?`, [userIdUnban], (err, row) => {
+          if (!row) {
+            ctx.reply('کاربر یافت نشد.');
+            adminSession[ADMIN_ID] = null;
+            return;
+          }
+          db.run(`UPDATE users SET banned_until = 0 WHERE chat_id = ?`, [userIdUnban], (err2) => {
+            if (!err2) ctx.reply('کاربر با موفقیت آن بن شد.');
+            else ctx.reply('خطا در آن بن کردن کاربر.');
+            adminSession[ADMIN_ID] = null;
+          });
+        });
       }
-      db.run(`UPDATE users SET banned_until = 0 WHERE chat_id = ?`, [unbanUserId], (err) => {
-        if (!err) ctx.reply('کاربر با موفقیت آن بن شد.');
-        else ctx.reply('خطا در آن بن کردن کاربر.');
-        adminSession[ADMIN_ID] = null;
-      });
       break;
 
     case 'add_chance_user_id':
-      const addChanceUserId = parseInt(text);
-      if (isNaN(addChanceUserId)) {
-        ctx.reply('آیدی معتبر نیست. لطفا عدد وارد کنید.');
-        return;
+      {
+        const userIdAdd = parseInt(text);
+        if (isNaN(userIdAdd)) {
+          ctx.reply('آیدی معتبر نیست. لطفا عدد وارد کنید.');
+          return;
+        }
+        session.targetUser = userIdAdd;
+        session.step = 'add_chance_user_amount';
+        ctx.reply('تعداد شانس‌هایی که می‌خواهید اضافه کنید را وارد کنید:');
       }
-      session.targetUser = addChanceUserId;
-      session.step = 'add_chance_user_amount';
-      ctx.reply('تعداد شانس اضافی که می‌خواهید اضافه کنید را وارد کنید:');
       break;
 
     case 'add_chance_user_amount':
-      const amount = parseInt(text);
-      if (isNaN(amount) || amount <= 0) {
-        ctx.reply('لطفا عدد صحیح مثبت وارد کنید.');
-        return;
-      }
-      db.get(`SELECT extra_uses FROM users WHERE chat_id = ?`, [session.targetUser], (err, user) => {
-        if (!user) {
-          ctx.reply('کاربر یافت نشد.');
-          adminSession[ADMIN_ID] = null;
+      {
+        const amount = parseInt(text);
+        if (isNaN(amount) || amount <= 0) {
+          ctx.reply('مقدار معتبر نیست. لطفا عدد مثبت وارد کنید.');
           return;
         }
-        const newExtra = user.extra_uses + amount;
-        db.run(`UPDATE users SET extra_uses = ? WHERE chat_id = ?`, [newExtra, session.targetUser], (err2) => {
-          if (!err2) ctx.reply('شانس اضافه شد.');
-          else ctx.reply('خطا در افزودن شانس.');
-          adminSession[ADMIN_ID] = null;
+        db.get(`SELECT uses_left FROM users WHERE chat_id = ?`, [session.targetUser], (err, row) => {
+          if (!row) {
+            ctx.reply('کاربر یافت نشد.');
+            adminSession[ADMIN_ID] = null;
+            return;
+          }
+          const newUses = row.uses_left + amount;
+          db.run(`UPDATE users SET uses_left = ? WHERE chat_id = ?`, [newUses, session.targetUser], (err2) => {
+            if (!err2) ctx.reply(`تعداد ${amount} شانس به کاربر اضافه شد.`);
+            else ctx.reply('خطا در اضافه کردن شانس.');
+            adminSession[ADMIN_ID] = null;
+          });
         });
-      });
+      }
       break;
 
     default:
+      ctx.reply('دستور نامعتبر. لطفا دوباره تلاش کنید.');
+      adminSession[ADMIN_ID] = null;
       break;
   }
 });
 
-// لانچ ربات
 bot.launch();
-console.log('Bot started...');
-
-
----
