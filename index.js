@@ -376,62 +376,39 @@ bot.on('message', async (msg) => {
       break;
 
     case 'broadcast':
-      const broadcastText = text;
-      bot.sendMessage(userId, 'در حال ارسال پیام همگانی...');
-      db.all(`SELECT user_id FROM users WHERE banned = 0`, (err, rows) => {
-        if (err) {
-          bot.sendMessage(userId, 'خطا در ارسال پیام همگانی.');
-          resetUserState(userId);
-          return;
-        }
+      // ارسال پیام همگانی به همه کاربران
+      db.all(`SELECT user_id FROM users`, [], (err, rows) => {
         rows.forEach(row => {
-          bot.sendMessage(row.user_id, broadcastText).catch(() => {});
+          bot.sendMessage(row.user_id, text).catch(() => {});
         });
-        bot.sendMessage(userId, 'پیام همگانی ارسال شد.');
-       resetUserState(userId);
-     });
-     break;
+      });
+      bot.sendMessage(userId, 'پیام برای همه کاربران ارسال شد.');
+      resetUserState(userId);
+      break;
 
-   case 'ban_enter_id':
-     const banId = parseInt(text);
-     if (isNaN(banId)) {
-       return bot.sendMessage(userId, 'آیدی عددی معتبر وارد کنید:');
-     }
-     getUser(banId).then(targetUser => {
-       if (!targetUser) {
-         bot.sendMessage(userId, 'کاربر یافت نشد.');
-       } else {
-         setBanStatus(banId, true);
-         bot.sendMessage(userId, `کاربر ${banId} بن شد.`);
-       }
-       resetUserState(userId);
-     });
-     break;
+    case 'ban_enter_id':
+      const banId = parseInt(text);
+      if (isNaN(banId)) return bot.sendMessage(userId, 'آیدی نامعتبر است.');
+      setBanStatus(banId, true);
+      bot.sendMessage(userId, `کاربر ${banId} بن شد.`);
+      resetUserState(userId);
+      break;
 
-   case 'unban_enter_id':
-     const unbanId = parseInt(text);
-     if (isNaN(unbanId)) {
-       return bot.sendMessage(userId, 'آیدی عددی معتبر وارد کنید:');
-     }
-     getUser(unbanId).then(targetUser => {
-       if (!targetUser) {
-         bot.sendMessage(userId, 'کاربر یافت نشد.');
-       } else {
-         setBanStatus(unbanId, false);
-         bot.sendMessage(userId, `کاربر ${unbanId} آن‌بن شد.`);
-       }
-       resetUserState(userId);
-     });
-     break;
+    case 'unban_enter_id':
+      const unbanId = parseInt(text);
+      if (isNaN(unbanId)) return bot.sendMessage(userId, 'آیدی نامعتبر است.');
+      setBanStatus(unbanId, false);
+      bot.sendMessage(userId, `کاربر ${unbanId} آن‌بن شد.`);
+      resetUserState(userId);
+      break;
 
-   case 'edit_help':
-     setHelpText(text);
-     bot.sendMessage(userId, 'متن راهنما با موفقیت بروزرسانی شد.');
-     resetUserState(userId);
-     break;
- }
+    case 'edit_help':
+      setHelpText(text);
+      bot.sendMessage(userId, 'متن راهنما با موفقیت به‌روزرسانی شد.');
+      resetUserState(userId);
+      break;
+  }
 });
-
-       app.listen(port, () => {
-  console.log(`Bot server is running on port ${port}`);
+app.listen(port, () => {
+  console.log(`Bot is running on port ${port}`);
 });
