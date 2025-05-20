@@ -3,15 +3,21 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const app = express();
 
-const token = 'توکن خودت';
+const token = '8129314550:AAFQTvL8VVg-4QtQD8QLY03LCWiSP1uaCak';
 const adminId = 381183017;
 const webhookUrl = 'https://my-telegram-bot-albl.onrender.com';
 const port = process.env.PORT || 10000;
 
-const bot = new TelegramBot(token);
+// وبهوک => polling باید false باشه
+const bot = new TelegramBot(token, { polling: false });
+
+// ست کردن وبهوک روی URL صحیح
 bot.setWebHook(`${webhookUrl}/bot${token}`);
 
+// برای خواندن JSON های ارسالی تلگرام
 app.use(express.json());
+
+// دریافت آپدیت‌ها از تلگرام و پردازش آنها
 app.post(`/bot${token}`, (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
@@ -56,6 +62,7 @@ bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
     if (existingUser && existingUser.invites === 0) {
       updatePoints(refId, 5);
       db.run(`UPDATE users SET invites = invites + 1 WHERE user_id = ?`, [refId]);
+      db.run(`UPDATE users SET invites = 1 WHERE user_id = ?`, [userId]); // اضافه: جلوگیری از تکرار امتیاز دادن
     }
   }
 
