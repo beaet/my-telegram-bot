@@ -32,23 +32,35 @@ const user = await getUser(userId); if (!user) return;
 
 if (userState[userId]) { const state = userState[userId]; if (state.step === 'total') { const total = parseInt(text); if (isNaN(total)) return bot.sendMessage(userId, 'تعداد کل بازی‌ها را به صورت عدد وارد کن.'); state.total = total; state.step = 'rate'; return bot.sendMessage(userId, 'ریت فعلی را وارد کن (مثلا 55):'); } if (state.step === 'rate') { const rate = parseFloat(text); if (isNaN(rate)) return bot.sendMessage(userId, 'درصد ریت را به صورت عدد وارد کن.'); if (state.type === 'rate') { state.rate = rate; state.step = 'target'; return bot.sendMessage(userId, 'ریت هدف را وارد کن:'); } else { const wins = Math.round((state.total * rate) / 100); const losses = state.total - wins; bot.sendMessage(userId, برد: ${wins} | باخت: ${losses}); delete userState[userId]; } } if (state.step === 'target') { const target = parseFloat(text); if (isNaN(target)) return bot.sendMessage(userId, 'ریت هدف را به صورت عدد وارد کن.'); const currentWins = (state.total * state.rate) / 100; const x = Math.ceil(((target / 100 * state.total) - currentWins) / (1 - target / 100)); bot.sendMessage(userId, برای رسیدن به ${target}% باید ${x} بازی متوالی ببری.); delete userState[userId]; } return; }
 
-// عملیات اصلی if (text === 'محاسبه ریت' || text === 'محاسبه برد/باخت') { if (user.points <= 0) return bot.sendMessage(userId, 'شما امتیازی برای استفاده ندارید.'); updatePoints(userId, -1); userState[userId] = { type: text === 'محاسبه ریت' ? 'rate' : 'w/l', step: 'total' }; return bot.sendMessage(userId, 'تعداد کل بازی‌ها را وارد کن:'); }
+if (text === 'محاسبه ریت' || text === 'محاسبه برد/باخت') { if (user.points <= 0) return bot.sendMessage(userId, 'شما امتیازی برای استفاده ندارید.'); updatePoints(userId, -1); userState[userId] = { type: text === 'محاسبه ریت' ? 'rate' : 'w/l', step: 'total' }; return bot.sendMessage(userId, 'تعداد کل بازی‌ها را وارد کن:'); }
 
-if (text === 'دریافت لینک دعوت') { return bot.sendMessage(userId, لینک دعوت اختصاصی شما: https://t.me/${bot.username}?start=${userId}); }
+if (text === 'دریافت لینک دعوت') { return bot.sendMessage(userId, لینک دعوت اختصاصی شما: https://t.me/my_rate_bot?start=${userId}); }
 
-if (text === 'حساب کاربری') { return bot.sendMessage(userId, آیدی عددی: ${userId} امتیاز باقی‌مانده: ${user.points} تعداد دعوتی‌ها: ${user.invites}); } });
+if (text === 'حساب کاربری') { return bot.sendMessage(userId, آیدی عددی: ${userId}\nامتیاز باقی‌مانده: ${user.points}\nتعداد دعوتی‌ها: ${user.invites}); }
 
-// پنل مدیر bot.onText(//panel/, (msg) => { if (msg.from.id !== adminId) return; bot.sendMessage(adminId, 'انتخاب کن:', { reply_markup: { keyboard: [ ['افزودن امتیاز', 'کسر امتیاز'], ['بازگشت'] ], resize_keyboard: true } }); });
+if (userId === adminId) { if (text === '/panel') { return bot.sendMessage(adminId, 'انتخاب کن:', { reply_markup: { keyboard: [ ['افزودن امتیاز', 'کسر امتیاز'], ['بازگشت'] ], resize_keyboard: true } }); }
 
-bot.on('message', async (msg) => { const userId = msg.from.id; const text = msg.text;
+if (text === 'افزودن امتیاز' || text === 'کسر امتیاز') {
+  userState[userId] = { step: 'enter_id', type: text.includes('افزودن') ? 'add' : 'sub' };
+  return bot.sendMessage(userId, 'آیدی عددی کاربر را وارد کنید:');
+}
 
-if (userId !== adminId) return;
+const state = userState[userId];
+if (state && state.step === 'enter_id') {
+  state.targetId = parseInt(text);
+  state.step = 'enter_amount';
+  return bot.sendMessage(userId, 'مقدار امتیاز را وارد کنید:');
+}
 
-if (text === 'افزودن امتیاز' || text === 'کسر امتیاز') { userState[userId] = { step: 'enter_id', type: text.includes('افزودن') ? 'add' : 'sub' }; return bot.sendMessage(userId, 'آیدی عددی کاربر را وارد کنید:'); }
+if (state && state.step === 'enter_amount') {
+  const amount = parseInt(text);
+  if (isNaN(amount)) return bot.sendMessage(userId, 'عدد وارد کن.');
+  updatePoints(state.targetId, state.type === 'add' ? amount : -amount);
+  bot.sendMessage(userId, 'انجام شد.');
+  delete userState[userId];
+}
 
-const state = userState[userId]; if (state && state.step === 'enter_id') { state.targetId = parseInt(text); state.step = 'enter_amount'; return bot.sendMessage(userId, 'مقدار امتیاز را وارد کنید:'); }
-
-if (state && state.step === 'enter_amount') { const amount = parseInt(text); if (isNaN(amount)) return bot.sendMessage(userId, 'عدد وارد کن.'); updatePoints(state.targetId, state.type === 'add' ? amount : -amount); bot.sendMessage(userId, 'انجام شد.'); delete userState[userId]; } });
+} });
 
 app.listen(port, () => console.log(Server running on port ${port}));
 
