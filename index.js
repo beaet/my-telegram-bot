@@ -27,9 +27,7 @@ db.serialize(() => {
     start_message TEXT DEFAULT 'سلام! به ربات ما خوش آمدید.'
   )`);
 
-  db.get(`SELECT * FROM users WHERE chat_id = ?`, [chatId], (err, user) => {
-  if (err) {
-    console.error('DB error on SELECT users:', err);
+  console.error('DB error on SELECT users:', err);
     return;
   }
   if (!user) {
@@ -473,11 +471,3 @@ const express = require('express');
 const app = express();
 
 const PORT = process.env.PORT || 3000;
-
-app.get('/', (req, res) => {
-  res.send('Bot is running');
-});
-
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
