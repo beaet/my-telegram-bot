@@ -3,24 +3,26 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const app = express();
 
-const token = '8129314550:AAFQTvL8VVg-4QtQD8QLY03LCWiSP1uaCak';
-const adminId = 381183017;
-const webhookUrl = 'https://my-telegram-bot-albl.onrender.com';
+const token = '8129314550:AAFQTvL8VVg-4QtQD8QLY03LCWiSP1uaCak';  // توکن ربات
+const adminId = 381183017;  // آیدی ادمین
+const webhookUrl = 'https://my-telegram-bot-albl.onrender.com';  // آدرس وبهوک شما
 const port = process.env.PORT || 10000;
 
-// وبهوک (polling: false)
+// تنظیم وبهوک و ربات
 const bot = new TelegramBot(token, { polling: false });
 bot.setWebHook(`${webhookUrl}/bot${token}`);
 
 app.use(express.json());
 
+// دریافت آپدیت‌ها از تلگرام از طریق وبهوک
 app.post(`/bot${token}`, (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
 
-// راه‌اندازی دیتابیس
+// راه‌اندازی دیتابیس SQLite
 const db = new sqlite3.Database('./botdata.sqlite');
+
 db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS users (
     user_id INTEGER PRIMARY KEY,
@@ -42,15 +44,15 @@ db.serialize(() => {
   });
 });
 
-// وضعیت کاربران در حافظه برای مراحل
+// وضعیت موقت کاربر برای مراحل مختلف
 const userState = {};
 
-// تابع ذخیره یا اطمینان از وجود کاربر
+// کمک برای ایجاد یا اطمینان از وجود کاربر در دیتابیس
 function ensureUser(user) {
   db.run(`INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)`, [user.id, user.username || '']);
 }
 
-// گرفتن کاربر از دیتابیس
+// گرفتن اطلاعات کاربر از دیتابیس
 function getUser(userId) {
   return new Promise((resolve, reject) => {
     db.get(`SELECT * FROM users WHERE user_id = ?`, [userId], (err, row) => {
@@ -60,7 +62,7 @@ function getUser(userId) {
   });
 }
 
-// بروزرسانی امتیاز کاربر (اضافه یا کم)
+// آپدیت امتیاز کاربر (مثبت یا منفی)
 function updatePoints(userId, amount) {
   db.run(`UPDATE users SET points = points + ? WHERE user_id = ?`, [amount, userId]);
 }
@@ -70,7 +72,7 @@ function setBanStatus(userId, status) {
   db.run(`UPDATE users SET banned = ? WHERE user_id = ?`, [status ? 1 : 0, userId]);
 }
 
-// گرفتن متن راهنما از دیتابیس
+// گرفتن متن راهنما
 function getHelpText() {
   return new Promise((resolve, reject) => {
     db.get(`SELECT value FROM settings WHERE key = 'help_text'`, (err, row) => {
@@ -80,17 +82,17 @@ function getHelpText() {
   });
 }
 
-// ذخیره متن راهنما
+// ذخیره متن جدید راهنما
 function setHelpText(newText) {
   db.run(`INSERT OR REPLACE INTO settings (key, value) VALUES ('help_text', ?)`, [newText]);
 }
 
-// پاک کردن وضعیت کاربر
+// پاک کردن وضعیت موقت کاربر
 function resetUserState(userId) {
   delete userState[userId];
 }
 
-// ارسال منوی اصلی (یکبار فقط)
+// ارسال منوی اصلی با دکمه‌ها
 function sendMainMenu(userId) {
   const keyboard = {
     reply_markup: {
@@ -119,7 +121,7 @@ function sendMainMenu(userId) {
   bot.sendMessage(userId, 'به ربات خوش آمدید. یکی از گزینه‌ها را انتخاب کنید.', keyboard);
 }
 
-// هنگام دستور /start
+// هندل دستور /start با امکان لینک دعوت
 bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
   const userId = msg.from.id;
   const refId = match[1] ? parseInt(match[1]) : null;
@@ -146,7 +148,7 @@ bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
   sendMainMenu(userId);
 });
 
-// فقط دستور /panel برای پنل مدیریت
+// هندل دستور /panel فقط برای ادمین
 bot.onText(/\/panel/, async (msg) => {
   const userId = msg.from.id;
   if (userId !== adminId) {
@@ -175,7 +177,7 @@ bot.onText(/\/panel/, async (msg) => {
   });
 });
 
-// هندل دکمه‌ها
+// هندل کلیک روی دکمه‌های منو و پنل مدیریت
 bot.on('callback_query', async (query) => {
   const userId = query.from.id;
   const data = query.data;
@@ -243,12 +245,13 @@ bot.on('callback_query', async (query) => {
       return bot.sendMessage(userId, 'آیدی عددی کاربر برای آن‌بن کردن را وارد کنید:');
 
     case 'edit_help':
-  userState[userId] = { step: 'edit_help' };
-  await bot.answerCallbackQuery(query.id);
-  return bot.sendMessage(userId, 'متن جدید راهنما را ارسال کنید یا /cancel برای لغو:');
-}
+      userState[userId] = { step: 'edit_help' };
+      await bot.answerCallbackQuery(query.id);
+      return bot.sendMessage(userId, 'متن جدید راهنما را ارسال کنید یا /cancel برای لغو:');
+  }
+});
 
-// پاسخ به پیام‌ها برای مراحل مختلف
+// هندل پیام‌های ورودی برای مراحل مختلف
 bot.on('message', async (msg) => {
   const userId = msg.from.id;
   const text = msg.text;
@@ -263,152 +266,118 @@ bot.on('message', async (msg) => {
 
   const state = userState[userId];
 
+  // لغو عملیات با دستور /cancel
   if (text === '/cancel') {
     resetUserState(userId);
-    return bot.sendMessage(userId, 'عملیات لغو شد.', { reply_markup: { remove_keyboard: true } });
+    return bot.sendMessage(userId, 'عملیات لغو شد.', {
+      reply_markup: { remove_keyboard: true }
+    });
   }
 
-  switch (state.step) {
-    case 'total':
-      if (!/^\d+$/.test(text)) {
-        return bot.sendMessage(userId, 'لطفاً فقط عدد وارد کنید.');
-      }
-      state.total = parseInt(text);
-      if (state.type === 'rate') {
-        state.step = 'current_rate';
-        return bot.sendMessage(userId, 'ریت فعلی خود را وارد کنید (مثلاً 45):');
-      } else if (state.type === 'w/l') {
-        state.step = 'wins';
-        return bot.sendMessage(userId, 'تعداد بردهای متوالی را وارد کنید:');
-      }
-      break;
-
-    case 'current_rate':
-      if (!/^\d+$/.test(text)) {
-        return bot.sendMessage(userId, 'لطفاً فقط عدد وارد کنید.');
-      }
-      state.currentRate = parseInt(text);
-      state.step = 'target_rate';
-      return bot.sendMessage(userId, 'ریت هدف را وارد کنید:');
-
-    case 'target_rate':
-      if (!/^\d+$/.test(text)) {
-        return bot.sendMessage(userId, 'لطفاً فقط عدد وارد کنید.');
-      }
-      const targetRate = parseInt(text);
-      if (targetRate <= state.currentRate) {
-        return bot.sendMessage(userId, 'ریت هدف باید بزرگ‌تر از ریت فعلی باشد.');
-      }
-
-      // محاسبه تعداد برد متوالی لازم برای رسیدن به ریت هدف
-      const x = Math.ceil((state.total * targetRate - state.total * state.currentRate) / (100 - targetRate));
-      bot.sendMessage(userId, `برای رسیدن به ریت ${targetRate}% باید حدود ${x} بازی متوالی ببری.`);
-
-      // کم کردن امتیاز فقط وقتی پاسخ کامل شد
-      updatePoints(userId, -1);
-
-      resetUserState(userId);
-      break;
-
-    case 'wins':
-      if (!/^\d+$/.test(text)) {
-        return bot.sendMessage(userId, 'لطفاً فقط عدد وارد کنید.');
-      }
-      state.wins = parseInt(text);
-      state.step = 'losses';
-      return bot.sendMessage(userId, 'تعداد باخت‌های متوالی را وارد کنید:');
-
-    case 'losses':
-      if (!/^\d+$/.test(text)) {
-        return bot.sendMessage(userId, 'لطفاً فقط عدد وارد کنید.');
-      }
-      const wins = state.wins;
-      const losses = parseInt(text);
-
-      if (wins + losses > state.total) {
-        return bot.sendMessage(userId, 'جمع برد و باخت نمی‌تواند بیشتر از تعداد کل بازی‌ها باشد.');
-      }
-
-      // محاسبه ریت جدید
-      const newRate = Math.round(((wins * 100) / (wins + losses)) * 100) / 100;
-      bot.sendMessage(userId, `رتبه شما بعد از ${wins} برد و ${losses} باخت متوالی حدود ${newRate}% خواهد بود.`);
-
-      updatePoints(userId, -1);
-
-      resetUserState(userId);
-      break;
-
-    case 'enter_id':
-      const targetId = parseInt(text);
-      if (isNaN(targetId)) {
-        return bot.sendMessage(userId, 'آیدی باید عدد باشد. دوباره وارد کنید:');
-      }
-      state.targetId = targetId;
-      state.step = 'enter_points';
-      return bot.sendMessage(userId, 'مقدار امتیاز را وارد کنید:');
-
-    case 'enter_points':
-      const pts = parseInt(text);
-      if (isNaN(pts)) {
-        return bot.sendMessage(userId, 'عدد صحیح وارد کنید:');
-      }
-
-      getUser(state.targetId).then(targetUser => {
-        if (!targetUser) {
-          bot.sendMessage(userId, 'کاربر با این آیدی یافت نشد.');
-          resetUserState(userId);
-          return;
+  // مراحل پنل مدیریت (ادمین)
+  if (userId === adminId) {
+    switch (state.step) {
+      case 'enter_id':
+        if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک آیدی عددی معتبر وارد کنید.');
+        state.targetId = parseInt(text);
+        if (state.type === 'add') {
+          state.step = 'enter_points';
+          return bot.sendMessage(userId, 'تعداد امتیاز برای اضافه کردن را وارد کنید:');
+        } else if (state.type === 'sub') {
+          state.step = 'enter_points';
+          return bot.sendMessage(userId, 'تعداد امتیاز برای کسر را وارد کنید:');
         }
+        break;
 
+      case 'enter_points':
+        if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید.');
+        const pts = parseInt(text);
         if (state.type === 'add') {
           updatePoints(state.targetId, pts);
-          bot.sendMessage(userId, `به کاربر ${state.targetId}، ${pts} امتیاز اضافه شد.`);
-        } else {
-          if (targetUser.points < pts) {
-            bot.sendMessage(userId, 'کاربر امتیاز کافی ندارد.');
-          } else {
-            updatePoints(state.targetId, -pts);
-            bot.sendMessage(userId, `از کاربر ${state.targetId}، ${pts} امتیاز کسر شد.`);
-          }
+          bot.sendMessage(userId, `به کاربر ${state.targetId} مقدار ${pts} امتیاز اضافه شد.`);
+        } else if (state.type === 'sub') {
+          updatePoints(state.targetId, -pts);
+          bot.sendMessage(userId, `از کاربر ${state.targetId} مقدار ${pts} امتیاز کسر شد.`);
         }
         resetUserState(userId);
-      });
-      break;
+        break;
 
-    case 'broadcast':
-      // ارسال پیام همگانی به همه کاربران
-      db.all(`SELECT user_id FROM users`, [], (err, rows) => {
-        rows.forEach(row => {
-          bot.sendMessage(row.user_id, text).catch(() => {});
+      case 'broadcast':
+        const textToSend = text;
+        resetUserState(userId);
+        bot.sendMessage(userId, 'پیام در حال ارسال به همه کاربران...');
+        db.all(`SELECT user_id FROM users WHERE banned=0`, (err, rows) => {
+          if (rows && rows.length > 0) {
+            rows.forEach(row => {
+              bot.sendMessage(row.user_id, `پیام همگانی:\n\n${textToSend}`).catch(() => { });
+            });
+          }
         });
-      });
-      bot.sendMessage(userId, 'پیام برای همه کاربران ارسال شد.');
-      resetUserState(userId);
-      break;
+        break;
 
-    case 'ban_enter_id':
-      const banId = parseInt(text);
-      if (isNaN(banId)) return bot.sendMessage(userId, 'آیدی نامعتبر است.');
-      setBanStatus(banId, true);
-      bot.sendMessage(userId, `کاربر ${banId} بن شد.`);
-      resetUserState(userId);
-      break;
+      case 'ban_enter_id':
+        if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک آیدی عددی معتبر وارد کنید.');
+        const banId = parseInt(text);
+        setBanStatus(banId, true);
+        resetUserState(userId);
+        return bot.sendMessage(userId, `کاربر ${banId} بن شد.`);
 
-    case 'unban_enter_id':
-      const unbanId = parseInt(text);
-      if (isNaN(unbanId)) return bot.sendMessage(userId, 'آیدی نامعتبر است.');
-      setBanStatus(unbanId, false);
-      bot.sendMessage(userId, `کاربر ${unbanId} آن‌بن شد.`);
-      resetUserState(userId);
-      break;
+      case 'unban_enter_id':
+        if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک آیدی عددی معتبر وارد کنید.');
+        const unbanId = parseInt(text);
+        setBanStatus(unbanId, false);
+        resetUserState(userId);
+        return bot.sendMessage(userId, `کاربر ${unbanId} آن‌بن شد.`);
 
-    case 'edit_help':
-      setHelpText(text);
-      bot.sendMessage(userId, 'متن راهنما با موفقیت به‌روزرسانی شد.');
-      resetUserState(userId);
-      break;
+      case 'edit_help':
+        setHelpText(text);
+        resetUserState(userId);
+        return bot.sendMessage(userId, 'متن راهنما با موفقیت بروزرسانی شد.');
+    }
+  }
+
+  // مراحل محاسبه ریت یا برد/باخت برای کاربران عادی
+  if (state.type === 'rate' || state.type === 'w/l') {
+    switch (state.step) {
+      case 'total':
+        if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا عدد صحیح وارد کنید.');
+        state.total = parseInt(text);
+        state.step = 'win';
+        return bot.sendMessage(userId, 'تعداد بردها را وارد کنید:');
+
+      case 'win':
+        if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا عدد صحیح وارد کنید.');
+        state.win = parseInt(text);
+        if (state.win > state.total) return bot.sendMessage(userId, 'تعداد برد نمی‌تواند بیشتر از کل بازی‌ها باشد.');
+        
+        // انجام محاسبه
+        let result = '';
+        if (state.type === 'rate') {
+          const rate = ((state.win / state.total) * 100).toFixed(2);
+          result = `نرخ برد شما: ${rate}%`;
+        } else if (state.type === 'w/l') {
+          const lose = state.total - state.win;
+          result = `برد: ${state.win}\nباخت: ${lose}`;
+        }
+        updatePoints(userId, -1); // کم کردن 1 امتیاز
+        resetUserState(userId);
+        bot.sendMessage(userId, result + `\nامتیاز باقی‌مانده: ${user.points - 1}`);
+        sendMainMenu(userId);
+        break;
+    }
+  }
+
+  // مرحله پشتیبانی: فوروارد پیام به ادمین
+  if (state.step === 'support') {
+    if (msg.text || msg.photo || msg.video || msg.sticker) {
+      // فوروارد پیام به ادمین
+      bot.forwardMessage(adminId, userId, msg.message_id);
+      return bot.sendMessage(userId, 'پیام شما ارسال شد. برای خروج /start را بزنید.');
+    }
   }
 });
+  
+// شروع سرور
 app.listen(port, () => {
-  console.log(`Bot is running on port ${port}`);
+  console.log(`Server is running on port ${port}`);
 });
