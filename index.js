@@ -5,24 +5,20 @@ const app = express();
 
 const token = '8129314550:AAFQTvL8VVg-4QtQD8QLY03LCWiSP1uaCak';
 const adminId = 381183017;
-const webhookUrl = 'https://my-telegram-bot-albl.onrender.com';
-const port = process.env.PORT || 3000;
+const webhookUrl = 'https://my-rate-bot.onrender.com';
 
-// تنظیم وبهوک
 const bot = new TelegramBot(token);
 bot.setWebHook(`${webhookUrl}/bot${token}`);
 
 app.use(express.json());
 
-// وبهوک برای دریافت آپدیت‌ها
 app.post(`/bot${token}`, (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
 
-// دیتابیس
+// DB
 const db = new sqlite3.Database('./botdata.sqlite');
-
 db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS users (
     user_id INTEGER PRIMARY KEY,
@@ -32,15 +28,13 @@ db.serialize(() => {
   )`);
 });
 
-// حالت کاربر
 const userState = {};
 
-// افزودن کاربر جدید در صورت نبودن
+// Middleware
 function ensureUser(user) {
   db.run(`INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)`, [user.id, user.username || '']);
 }
 
-// گرفتن اطلاعات کاربر
 function getUser(userId) {
   return new Promise((resolve, reject) => {
     db.get(`SELECT * FROM users WHERE user_id = ?`, [userId], (err, row) => {
@@ -50,12 +44,11 @@ function getUser(userId) {
   });
 }
 
-// آپدیت امتیاز کاربر
 function updatePoints(userId, amount) {
   db.run(`UPDATE users SET points = points + ? WHERE user_id = ?`, [amount, userId]);
 }
 
-// فرمان استارت و پردازش دعوت
+// Start
 bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
   const userId = msg.from.id;
   const refId = match[1];
@@ -64,8 +57,8 @@ bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
   if (refId && parseInt(refId) !== userId) {
     const user = await getUser(userId);
     if (user && user.invites === 0) {
-      updatePoints(parseInt(refId), 5);
-      db.run(`UPDATE users SET invites = invites + 1 WHERE user_id = ?`, [parseInt(refId)]);
+      updatePoints(refId, 5);
+      db.run(`UPDATE users SET invites = invites + 1 WHERE user_id = ?`, [refId]);
     }
   }
 
@@ -82,7 +75,6 @@ bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
   bot.sendMessage(userId, 'به ربات خوش آمدید. یکی از گزینه‌ها را انتخاب کنید.', keyboard);
 });
 
-// دریافت پیام‌های کاربر
 bot.on('message', async (msg) => {
   const userId = msg.from.id;
   const text = msg.text;
@@ -91,7 +83,6 @@ bot.on('message', async (msg) => {
   const user = await getUser(userId);
   if (!user) return;
 
-  // اگر کاربر در حالت خاصی است (مثلا در فرآیند محاسبه)
   if (userState[userId]) {
     const state = userState[userId];
 
@@ -131,7 +122,6 @@ bot.on('message', async (msg) => {
     return;
   }
 
-  // شروع فرآیند محاسبه
   if (text === 'محاسبه ریت' || text === 'محاسبه برد/باخت') {
     if (user.points <= 0) return bot.sendMessage(userId, 'شما امتیازی برای استفاده ندارید.');
     updatePoints(userId, -1);
@@ -139,18 +129,14 @@ bot.on('message', async (msg) => {
     return bot.sendMessage(userId, 'تعداد کل بازی‌ها را وارد کن:');
   }
 
-  // لینک دعوت اختصاصی
   if (text === 'دریافت لینک دعوت') {
-    return bot.sendMessage(userId, `لینک دعوت اختصاصی شما:\nhttps://t.me/my_rate_bot?start=${userId}`);
+    return bot.sendMessage(userId, `لینک دعوت اختصاصی شما: https://t.me/my_rate_bot?start=${userId}`);
   }
 
-  // نمایش حساب کاربری
   if (text === 'حساب کاربری') {
-    return bot.sendMessage(userId,
-      `آیدی عددی: ${userId}\nامتیاز باقی‌مانده: ${user.points}\nتعداد دعوتی‌ها: ${user.invites}`);
+    return bot.sendMessage(userId, `آیدی عددی: ${userId}\nامتیاز باقی‌مانده: ${user.points}\nتعداد دعوتی‌ها: ${user.invites}`);
   }
 
-  // پنل مدیریت
   if (userId === adminId) {
     if (text === '/panel') {
       return bot.sendMessage(adminId, 'انتخاب کن:', {
@@ -171,9 +157,7 @@ bot.on('message', async (msg) => {
 
     const state = userState[userId];
     if (state && state.step === 'enter_id') {
-      const targetId = parseInt(text);
-      if (isNaN(targetId)) return bot.sendMessage(userId, 'آیدی عددی معتبر وارد کنید.');
-      state.targetId = targetId;
+      state.targetId = parseInt(text);
       state.step = 'enter_amount';
       return bot.sendMessage(userId, 'مقدار امتیاز را وارد کنید:');
     }
@@ -184,10 +168,10 @@ bot.on('message', async (msg) => {
       updatePoints(state.targetId, state.type === 'add' ? amount : -amount);
       bot.sendMessage(userId, 'انجام شد.');
       delete userState[userId];
-      return;
     }
   }
 });
 
+// پورت مناسب برای Render
 const port = process.env.PORT || 10000;
 app.listen(port, () => console.log(`Server running on port ${port}`));
