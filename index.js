@@ -317,19 +317,19 @@ bot.on('text', (ctx, next) => {
       ctx.reply('پیامی که می‌خواهید ارسال کنید را بنویسید:');
       break;
 
-    case 'send_message_text':
-      bot.telegram.sendMessage(session.targetUser, text)
-        .then(() => ctx.reply('پیام با موفقیت ارسال شد.'))
-        .catch(() => ctx.reply('ارسال پیام به کاربر با خطاا
-        
-        bot.telegram.sendMessage(session.targetUser, text)
-        .then(() => ctx.reply('پیام با موفقیت ارسال شد.'))
-        .catch(() => ctx.reply('ارسال پیام به کاربر با خطا رخ داد.'))
-        .finally(() => {
-          adminSession[ADMIN_ID] = null;
-        });
-      break;
+    // ... کد قبل از این قسمت بدون تغییر
 
+case 'send_message_text':
+  bot.telegram.sendMessage(session.targetUser, text)
+    .then(() => ctx.reply('پیام با موفقیت ارسال شد.'))
+    .catch(() => ctx.reply('ارسال پیام به کاربر با خطا رخ داد.'))
+    .finally(() => {
+      adminSession[ADMIN_ID] = null;
+    });
+  break;
+
+// ... ادامه کد بدون تغییر
+      
     case 'ban_user_permanent':
       {
         const userIdBan = parseInt(text);
