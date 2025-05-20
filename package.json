@@ -1,7 +1,7 @@
 {
-  "name": "telegram-bot-mlbb",
+  "name": "mlbb-rate-bot",
   "version": "1.0.0",
-  "description": "ربات تلگرام محاسبه ریت و مدیریت شانس‌ها",
+  "description": "Telegram bot for Mobile Legends rate calculation and user management",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -11,8 +11,5 @@
   "dependencies": {
     "telegraf": "^4.12.2",
     "sqlite3": "^5.1.6"
-  },
-  "engines": {
-    "node": ">=16.0.0"
   }
 }
