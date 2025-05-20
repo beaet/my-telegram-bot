@@ -1,7 +1,7 @@
 {
   "name": "telegram-rate-bot",
   "version": "1.0.0",
-  "description": "Telegram bot for rating with referral system and admin panel",
+"description": "Telegram bot for rating with referral system and admin panel",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
