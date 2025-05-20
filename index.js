@@ -3,7 +3,7 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const app = express();
 
-const token = '8129314550:AAFQTvL8VVg-4QtQD8QLY03LCWiSP1uaCak';
+const token = 'توکن خودت';
 const adminId = 381183017;
 const webhookUrl = 'https://my-telegram-bot-albl.onrender.com';
 const port = process.env.PORT || 10000;
@@ -30,10 +30,7 @@ db.serialize(() => {
 const userState = {};
 
 function ensureUser(user) {
-  db.run(`INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)`, [
-    user.id,
-    user.username || '',
-  ]);
+  db.run(`INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)`, [user.id, user.username || '']);
 }
 
 function getUser(userId) {
@@ -55,8 +52,8 @@ bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
   ensureUser(msg.from);
 
   if (refId && parseInt(refId) !== userId) {
-    const user = await getUser(userId);
-    if (user && user.invites === 0) {
+    const existingUser = await getUser(userId);
+    if (existingUser && existingUser.invites === 0) {
       updatePoints(refId, 5);
       db.run(`UPDATE users SET invites = invites + 1 WHERE user_id = ?`, [refId]);
     }
@@ -111,6 +108,32 @@ bot.on('callback_query', async (query) => {
     return bot.sendMessage(userId, 'برای خرید امتیاز به پیوی @Beast3694 مراجعه کنید.');
   }
 
+  if (data === 'admin_panel' && userId === adminId) {
+    return bot.sendMessage(userId, 'انتخاب کن:', {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '➕ افزودن امتیاز', callback_data: 'add_points' },
+            { text: '➖ کسر امتیاز', callback_data: 'sub_points' }
+          ],
+          [
+            { text: '📢 پیام همگانی', callback_data: 'broadcast' }
+          ]
+        ]
+      }
+    });
+  }
+
+  if (data === 'add_points' || data === 'sub_points') {
+    userState[userId] = { step: 'enter_id', type: data === 'add_points' ? 'add' : 'sub' };
+    return bot.sendMessage(userId, 'آیدی عددی کاربر را وارد کنید:');
+  }
+
+  if (data === 'broadcast') {
+    userState[userId] = { step: 'broadcast' };
+    return bot.sendMessage(userId, 'متن پیام همگانی را ارسال کنید:');
+  }
+
   bot.answerCallbackQuery(query.id);
 });
 
@@ -118,15 +141,15 @@ bot.on('message', async (msg) => {
   const userId = msg.from.id;
   const text = msg.text;
   ensureUser(msg.from);
+  const state = userState[userId];
 
-  if (userState[userId]) {
-    const state = userState[userId];
+  if (state) {
     if (state.step === 'total') {
       const total = parseInt(text);
       if (isNaN(total)) return bot.sendMessage(userId, 'تعداد کل بازی‌ها را به صورت عدد وارد کن.');
       state.total = total;
       state.step = 'rate';
-      return bot.sendMessage(userId, 'ریت فعلی را وارد کن (مثلا 55):');
+      return bot.sendMessage(userId, 'ریت فعلی را وارد کن (مثلاً 55):');
     }
 
     if (state.step === 'rate') {
@@ -153,45 +176,15 @@ bot.on('message', async (msg) => {
       delete userState[userId];
     }
 
-    return;
-  }
-
-  if (userId === adminId) {
-    const state = userState[userId];
-
-    if (text === '/panel') {
-      return bot.sendMessage(adminId, 'انتخاب کن:', {
-        reply_markup: {
-          keyboard: [
-            ['افزودن امتیاز', 'کسر امتیاز'],
-            ['پیام همگانی'],
-            ['بازگشت']
-          ],
-          resize_keyboard: true
-        }
-      });
-    }
-
-    if (text === 'افزودن امتیاز' || text === 'کسر امتیاز') {
-      userState[userId] = {
-        step: 'enter_id',
-        type: text.includes('افزودن') ? 'add' : 'sub'
-      };
-      return bot.sendMessage(userId, 'آیدی عددی کاربر را وارد کنید:');
-    }
-
-    if (text === 'پیام همگانی') {
-      userState[userId] = { step: 'broadcast' };
-      return bot.sendMessage(userId, 'متن پیام همگانی را ارسال کنید:');
-    }
-
-    if (state && state.step === 'enter_id') {
-      state.targetId = parseInt(text);
+    if (state.step === 'enter_id') {
+      const targetId = parseInt(text);
+      if (isNaN(targetId)) return bot.sendMessage(userId, 'آیدی عددی نامعتبر است.');
+      state.targetId = targetId;
       state.step = 'enter_amount';
       return bot.sendMessage(userId, 'مقدار امتیاز را وارد کنید:');
     }
 
-    if (state && state.step === 'enter_amount') {
+    if (state.step === 'enter_amount') {
       const amount = parseInt(text);
       if (isNaN(amount)) return bot.sendMessage(userId, 'عدد وارد کن.');
       updatePoints(state.targetId, state.type === 'add' ? amount : -amount);
@@ -199,7 +192,7 @@ bot.on('message', async (msg) => {
       delete userState[userId];
     }
 
-    if (state && state.step === 'broadcast') {
+    if (state.step === 'broadcast') {
       db.all(`SELECT user_id FROM users`, [], (err, rows) => {
         if (!err) {
           rows.forEach(row => {
@@ -210,9 +203,17 @@ bot.on('message', async (msg) => {
       bot.sendMessage(userId, 'پیام همگانی ارسال شد.');
       delete userState[userId];
     }
+
+    return;
+  }
+
+  if (userId === adminId && text === '/panel') {
+    return bot.sendMessage(userId, 'ورود به پنل ادمین:', {
+      reply_markup: {
+        inline_keyboard: [[{ text: 'ورود به پنل', callback_data: 'admin_panel' }]]
+      }
+    });
   }
 });
 
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
-});
+app.listen(port, () => console.log(`Server running on port ${port}`));
