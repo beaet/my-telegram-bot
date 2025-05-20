@@ -1,8 +1,7 @@
 {
   "name": "telegram-rate-bot",
   "version": "1.0.0",
-  "description": "ربات تلگرام محاسبه‌گر ریت با امتیاز دعوت‌نامه، و پنل مدیریتی",
-  "main": "index.js",
+    "description": "Telegram bot with Node.js on Render",
   "scripts": {
     "start": "node index.js"
   },
