@@ -52,16 +52,8 @@ function sendMainMenu(chatId) {
       one_time_keyboard: false
     }
   };
-  db.get(`SELECT * FROM users WHERE chat_id = ?`, [chatId], (err, user) => {
-  if (err) {
-    console.error('DB error on SELECT users:', err);
-    return;
-  }
-  if (!user) {
-    db.run(`INSERT INTO users (chat_id, uses_left, banned_until, extra_uses) VALUES (?, 5, 0, 0)`, [chatId], (err2) => {
-      if (err2) console.error('DB error on INSERT user:', err2);
-    });
-  }
+  db.run(`INSERT OR IGNORE INTO users (chat_id, uses_left, banned_until, extra_uses) VALUES (?, 5, 0, 0)`, [chatId], (err) => {
+  if (err) console.error('DB error on INSERT OR IGNORE user:', err);
 });
 
 // استارت و ثبت دعوت
