@@ -27,11 +27,16 @@ db.serialize(() => {
     start_message TEXT DEFAULT 'سلام! به ربات ما خوش آمدید.'
   )`);
 
-  db.get(`SELECT * FROM settings WHERE id = 1`, (err, row) => {
-    if (!row) {
-      db.run(`INSERT INTO settings (id, start_message) VALUES (1, 'سلام! به ربات ما خوش آمدید.')`);
-    }
-  });
+  db.get(`SELECT * FROM users WHERE chat_id = ?`, [chatId], (err, user) => {
+  if (err) {
+    console.error('DB error on SELECT users:', err);
+    return;
+  }
+  if (!user) {
+    db.run(`INSERT INTO users (chat_id, uses_left, banned_until, extra_uses) VALUES (?, 5, 0, 0)`, [chatId], (err2) => {
+      if (err2) console.error('DB error on INSERT user:', err2);
+    });
+  }
 });
 
 // تابع ارسال منوی اصلی (کیبورد معمولی)
@@ -95,15 +100,25 @@ bot.start(async (ctx) => {
 
 // میدلور بررسی بن بودن
 bot.use(async (ctx, next) => {
-  if (!ctx.chat) return next(); // بعضی آپدیت‌ها چت ندارند
+  if (!ctx.chat) return next();
+
   const chatId = ctx.chat.id;
-  db.get(`SELECT banned_until FROM users WHERE chat_id = ?`, [chatId], (err, row) => {
-    if (row && row.banned_until > Date.now()) {
-      ctx.reply('متأسفانه شما تا اطلاع ثانوی از استفاده از ربات محدود شده‌اید.');
-    } else {
-      next();
-    }
+
+  const bannedUntil = await new Promise((resolve, reject) => {
+    db.get(`SELECT banned_until FROM users WHERE chat_id = ?`, [chatId], (err, row) => {
+      if (err) return reject(err);
+      resolve(row ? row.banned_until : 0);
+    });
+  }).catch(err => {
+    console.error('DB error checking ban:', err);
+    return 0; // در صورت خطا، فرض کن بن نیست
   });
+
+  if (bannedUntil > Date.now()) {
+    return ctx.reply('متأسفانه شما تا اطلاع ثانوی از استفاده از ربات محدود شده‌اید.');
+  }
+
+  return next();
 });
 
 // پاسخ به پیام‌ها و دکمه‌ها
@@ -453,8 +468,6 @@ case 'send_message_text':
       break;
   }
 });
-
-bot.launch();
 
 const express = require('express');
 const app = express();
