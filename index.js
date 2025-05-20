@@ -52,11 +52,17 @@ function sendMainMenu(chatId) {
       one_time_keyboard: false
     }
   };
-  db.get(`SELECT start_message FROM settings WHERE id = 1`, (err, row) => {
-    const startMsg = row && row.start_message ? row.start_message : 'سلام! به ربات ما خوش آمدید.';
-    bot.telegram.sendMessage(chatId, startMsg, keyboard);
-  });
-}
+  db.get(`SELECT * FROM users WHERE chat_id = ?`, [chatId], (err, user) => {
+  if (err) {
+    console.error('DB error on SELECT users:', err);
+    return;
+  }
+  if (!user) {
+    db.run(`INSERT INTO users (chat_id, uses_left, banned_until, extra_uses) VALUES (?, 5, 0, 0)`, [chatId], (err2) => {
+      if (err2) console.error('DB error on INSERT user:', err2);
+    });
+  }
+});
 
 // استارت و ثبت دعوت
 bot.start(async (ctx) => {
@@ -471,3 +477,7 @@ const express = require('express');
 const app = express();
 
 const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
