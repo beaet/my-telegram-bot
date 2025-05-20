@@ -10,6 +10,7 @@
   "license": "MIT",
   "dependencies": {
     "telegraf": "^4.12.2",
-    "sqlite3": "^5.1.6"
+    "sqlite3": "^5.1.6",
+    "express": "^4.18.2"
   }
 }
