@@ -388,46 +388,50 @@ bot.on('message', async (msg) => {
           bot.sendMessage(row.user_id, broadcastText).catch(() => {});
         });
         bot.sendMessage(userId, 'پیام همگانی ارسال شد.');
-        resetUserState(userId);
-      });
-      break;
+       resetUserState(userId);
+     });
+     break;
 
-    case 'ban_enter_id':
-      const banId = parseInt(text);
-      if (isNaN(banId)) {
-        return bot.sendMessage(userId, 'آیدی باید عدد باشد. دوباره وارد کنید:');
-      }
-      setBanStatus(banId, true);
-      bot.sendMessage(userId, `کاربر با آیدی ${banId} بن شد.`);
-      resetUserState(userId);
-      break;
+   case 'ban_enter_id':
+     const banId = parseInt(text);
+     if (isNaN(banId)) {
+       return bot.sendMessage(userId, 'آیدی عددی معتبر وارد کنید:');
+     }
+     getUser(banId).then(targetUser => {
+       if (!targetUser) {
+         bot.sendMessage(userId, 'کاربر یافت نشد.');
+       } else {
+         setBanStatus(banId, true);
+         bot.sendMessage(userId, `کاربر ${banId} بن شد.`);
+       }
+       resetUserState(userId);
+     });
+     break;
 
-    case 'unban_enter_id':
-      const unbanId = parseInt(text);
-      if (isNaN(unbanId)) {
-        return bot.sendMessage(userId, 'آیدی باید عدد باشد. دوباره وارد کنید:');
-      }
-      setBanStatus(unbanId, false);
-      bot.sendMessage(userId, `کاربر با آیدی ${unbanId} آن‌بن شد.`);
-      resetUserState(userId);
-      break;
+   case 'unban_enter_id':
+     const unbanId = parseInt(text);
+     if (isNaN(unbanId)) {
+       return bot.sendMessage(userId, 'آیدی عددی معتبر وارد کنید:');
+     }
+     getUser(unbanId).then(targetUser => {
+       if (!targetUser) {
+         bot.sendMessage(userId, 'کاربر یافت نشد.');
+       } else {
+         setBanStatus(unbanId, false);
+         bot.sendMessage(userId, `کاربر ${unbanId} آن‌بن شد.`);
+       }
+       resetUserState(userId);
+     });
+     break;
 
-    case 'edit_help':
-      setHelpText(text);
-      bot.sendMessage(userId, 'متن راهنما با موفقیت تغییر کرد.');
-      resetUserState(userId);
-      break;
-
-    case 'support':
-      // فوروارد کردن پیام‌ها به ادمین
-      if (msg.chat.id !== adminId) {
-        bot.forwardMessage(adminId, msg.chat.id, msg.message_id);
-        return bot.sendMessage(userId, 'پیام شما به پشتیبانی ارسال شد.');
-      }
-      break;
-  }
+   case 'edit_help':
+     setHelpText(text);
+     bot.sendMessage(userId, 'متن راهنما با موفقیت بروزرسانی شد.');
+     resetUserState(userId);
+     break;
+ }
 });
-  
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
+
+       app.listen(port, () => {
+  console.log(`Bot server is running on port ${port}`);
 });
