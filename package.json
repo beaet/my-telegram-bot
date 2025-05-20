@@ -1,16 +1,14 @@
 {
-  "name": "mlbb-rate-bot",
+  "name": "my-telegram-bot",
   "version": "1.0.0",
-  "description": "Telegram bot for Mobile Legends rate calculation and user management",
+  "description": "Telegram bot with Node.js on Render",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
-  "author": "YourName",
-  "license": "MIT",
   "dependencies": {
-    "telegraf": "^4.12.2",
-    "sqlite3": "^5.1.6",
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "node-telegram-bot-api": "^0.61.0",
+    "sqlite3": "^5.1.6"
   }
 }
