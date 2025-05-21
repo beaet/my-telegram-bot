@@ -24,43 +24,42 @@ app.post(`/bot${token}`, (req, res) => {
 
 const db = new sqlite3.Database('./botdata.sqlite');
 
-db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS users (
-    user_id INTEGER PRIMARY KEY,
-    points INTEGER DEFAULT 0
-  )`);
+db.run(`ALTER TABLE users ADD COLUMN banned INTEGER DEFAULT 0`, (err) => {
+  if (err && !err.message.includes('duplicate column name')) {
+    console.error('خطا در افزودن ستون banned:', err.message);
+  }
+});
 
-  // اضافه کردن ستون banned اگر موجود نیست
-  db.run(`ALTER TABLE users ADD COLUMN banned INTEGER DEFAULT 0`, (err) => {
-    if (err && !err.message.includes('duplicate column name')) {
-      console.error('خطا در افزودن ستون banned:', err.message);
-    }
-  });
+// اضافه کردن ستون last_chance_use اگر موجود نیست
+db.run(`ALTER TABLE users ADD COLUMN last_chance_use INTEGER DEFAULT 0`, (err) => {
+  if (err && !err.message.includes('duplicate column name')) {
+    console.error('خطا در افزودن ستون last_chance_use:', err.message);
+  }
+});
 
-  // اضافه کردن ستون last_chance_use اگر موجود نیست
-  db.run(`ALTER TABLE users ADD COLUMN last_chance_use INTEGER DEFAULT 0`, (err) => {
-    if (err && !err.message.includes('duplicate column name')) {
-      console.error('خطا در افزودن ستون last_chance_use:', err.message);
-    }
-  });
+// اضافه کردن ستون username اگر موجود نیست
+db.run(`ALTER TABLE users ADD COLUMN username TEXT`, (err) => {
+  if (err && !err.message.includes('duplicate column name')) {
+    console.error('خطا در افزودن ستون username:', err.message);
+  }
+});
 
-  // اضافه کردن ستون username اگر موجود نیست
-  db.run(`ALTER TABLE users ADD COLUMN username TEXT`, (err) => {
-    if (err && !err.message.includes('duplicate column name')) {
-      console.error('خطا در افزودن ستون username:', err.message);
-    }
-  });
+// اضافه کردن ستون invites اگر موجود نیست
+db.run(`ALTER TABLE users ADD COLUMN invites INTEGER DEFAULT 0`, (err) => {
+  if (err && !err.message.includes('duplicate column name')) {
+    console.error('خطا در افزودن ستون invites:', err.message);
+  }
+});
 
-  db.run(`CREATE TABLE IF NOT EXISTS settings (
-    key TEXT PRIMARY KEY,
-    value TEXT
-  )`);
+db.run(`CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT
+)`);
 
-  db.get(`SELECT value FROM settings WHERE key = 'help_text'`, (err, row) => {
-    if (!row) {
-      db.run(`INSERT INTO settings (key, value) VALUES (?, ?)`, ['help_text', 'متن پیش‌فرض راهنما']);
-    }
-  });
+db.get(`SELECT value FROM settings WHERE key = 'help_text'`, (err, row) => {
+  if (!row) {
+    db.run(`INSERT INTO settings (key, value) VALUES (?, ?)`, ['help_text', 'متن پیش‌فرض راهنما']);
+  }
 });
 
 // وضعیت موقت کاربر برای مراحل مختلف
