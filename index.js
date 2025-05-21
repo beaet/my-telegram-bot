@@ -203,20 +203,29 @@ bot.on('callback_query', async (query) => {
 
     case 'referral':
       await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, `لینک دعوت اختصاصی شما:\nhttps://t.me/mlbbratebot?start=${userId}`);
+      return bot.sendMessage(userId, `می‌خوای امتیاز بیشتری بگیری؟ 🎁
+لینک اختصاصی خودتو برای دوستات بفرست!
+هر کسی که با لینک تو وارد ربات بشه، ۵ امتیاز دائمی می‌گیری ⭐️
+
+برای دریافت لینک زیرمجموعه‌گیری، دکمه‌ی مربوطه رو بزن ⬇️:\nhttps://t.me/mlbbratebot?start=${userId}`);
 
     case 'profile':
       await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, `آیدی عددی: ${userId}\nامتیاز باقی‌مانده: ${user.points}\nتعداد دعوتی‌ها: ${user.invites}`);
+      return bot.sendMessage(userId, `آیدی عددی🆔: ${userId}\nامتیاز باقی‌مانده⭐: ${user.points}\nتعداد دعوتی‌ها📨: ${user.invites}`);
 
     case 'buy':
       await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'برای خرید امتیاز به پیوی @Beast3694 مراجعه کنید.');
+      return bot.sendMessage(userId, '🎁برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:
+
+📩 @Beast3694');
 
     case 'support':
       userState[userId] = { step: 'support' };
       await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'شما در بخش پشتیبانی هستید. هر پیام شما به من فوروارد خواهد شد. برای خروج /start بزنید.');
+      return bot.sendMessage(userId, 'شما وارد بخش پشتیبانی شده‌اید!
+
+پیام شما به من فوروارد خواهد شد 📤
+برای خروج و بازگشت به منوی اصلی، دستور /start را ارسال کنید ⏪');
 
     case 'help':
       await bot.answerCallbackQuery(query.id);
