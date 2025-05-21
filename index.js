@@ -300,7 +300,7 @@ case 'chance':
     case 'ban_user':
       userState[userId] = { step: 'ban_enter_id' };
       await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'آیدی عددی کاربر برای بن کردن را وارد کنید:');
+      return bot.sendMessage(userId, 'آیدی عددی کاربر را برای بن کردن وارد کنید:');
 
     case 'unban_user':
       userState[userId] = { step: 'unban_enter_id' };
