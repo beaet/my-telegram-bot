@@ -60,7 +60,11 @@ const userState = {};
 
 // کمک برای ایجاد یا اطمینان از وجود کاربر در دیتابیس
 function ensureUser(user) {
-  db.run(`INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)`, [user.id, user.username || '']);
+  db.get(`SELECT user_id FROM users WHERE user_id = ?`, [user.id], (err, row) => {
+    if (!row) {
+      db.run(`INSERT INTO users (user_id, username, points) VALUES (?, ?, 5)`, [user.id, user.username || '']);
+    }
+  });
 }
 
 // گرفتن اطلاعات کاربر از دیتابیس
@@ -163,15 +167,20 @@ bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
   resetUserState(userId);
 
   // مدیریت دعوت
-  if (refId && refId !== userId) {
-    db.get(`SELECT invites FROM users WHERE user_id = ?`, [userId], (err, row) => {
-      if (row && row.invites === 0) {
-        updatePoints(refId, 5);
-        db.run(`UPDATE users SET invites = invites + 1 WHERE user_id = ?`, [refId]);
-        db.run(`UPDATE users SET invites = 1 WHERE user_id = ?`, [userId]);
-      }
-    });
-  }
+if (refId && refId !== userId) {
+  db.get(`SELECT invites FROM users WHERE user_id = ?`, [userId], (err, row) => {
+    if (!row) {
+      // کاربر جدیدی که دعوت شده
+      db.run(`INSERT INTO users (user_id, username, points, invites) VALUES (?, ?, 5, 0)`, [userId, msg.from.username || '']);
+      
+      // به دعوت‌کننده امتیاز اضافه کن
+      updatePoints(refId, 5);
+
+      // افزایش تعداد دعوتی‌ها برای دعوت‌کننده
+      db.run(`UPDATE users SET invites = invites + 1 WHERE user_id = ?`, [refId]);
+    }
+  });
+}
 
   sendMainMenu(userId);
 });
@@ -238,7 +247,8 @@ bot.on('callback_query', async (query) => {
 
     case 'profile':
       await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, `🆔 آیدی عددی: ${userId}\n⭐ امتیاز فعلی: ${user.points}\n📨 تعداد دعوتی‌ها: ${user.invites}`);
+      const invitesCount = user.invites || 0;
+return bot.sendMessage(userId, `🆔 آیدی عددی: ${userId}\n⭐ امتیاز فعلی: ${user.points}\n📨 تعداد دعوتی‌ها: ${invitesCount}`);
 
     case 'buy':
       await bot.answerCallbackQuery(query.id);
@@ -300,7 +310,7 @@ case 'chance':
     case 'ban_user':
       userState[userId] = { step: 'ban_enter_id' };
       await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'آیدی عددی کاربر را برای بن کردن وارد کنید:');
+      return bot.sendMessage(userId, 'آیدی عددی کاربر برای بن کردن را وارد کنید:');
 
     case 'unban_user':
       userState[userId] = { step: 'unban_enter_id' };
