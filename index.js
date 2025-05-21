@@ -38,43 +38,34 @@ const db = new sqlite3.Database('./botdata.sqlite', (err) => {
   )`, (err) => {
     if (err) {
       console.error('خطا در ایجاد جدول users:', err.message);
+      return;
     }
+
+    // چک کردن وجود ستون points
+    db.all(`PRAGMA table_info(users)`, (err, columns) => {
+      if (err) {
+        console.error('خطا در خواندن ساختار جدول users:', err.message);
+        return;
+      }
+
+      const hasPoints = columns.some(col => col.name === 'points');
+
+      if (!hasPoints) {
+        db.run("ALTER TABLE users ADD COLUMN points INTEGER DEFAULT 0", (err) => {
+          if (err) {
+            console.error("خطا در افزودن ستون points:", err.message);
+          } else {
+            console.log("ستون points با موفقیت اضافه شد");
+          }
+        });
+      } else {
+        console.log("ستون points قبلاً وجود دارد");
+      }
+    });
   });
 
-db.run("ALTER TABLE users ADD COLUMN points INTEGER DEFAULT 0", (err) => {
-  if (err) {
-    if (err.message.includes("duplicate column name")) {
-      console.log("ستون points قبلاً اضافه شده");
-    } else {
-      console.error("خطا در افزودن ستون points:", err.message);
-    }
-  } else {
-    console.log("ستون points با موفقیت اضافه شد");
-  }
+  // ادامه کد ایجاد جدول settings و غیره
 });
-
-  // ایجاد جدول settings اگر وجود نداشته باشد
-  db.run(`CREATE TABLE IF NOT EXISTS settings (
-    key TEXT PRIMARY KEY,
-    value TEXT
-  )`, (err) => {
-    if (err) {
-      console.error('خطا در ایجاد جدول settings:', err.message);
-    } else {
-      // چک کردن وجود مقدار help_text و در صورت نبود، اضافه کردن مقدار پیش‌فرض
-      db.get(`SELECT value FROM settings WHERE key = 'help_text'`, (err, row) => {
-        if (err) {
-          console.error('خطا در خواندن settings:', err.message);
-        } else if (!row) {
-          db.run(`INSERT INTO settings (key, value) VALUES (?, ?)`, ['help_text', 'متن پیش‌فرض راهنما'], (err) => {
-            if (err) console.error('خطا در درج مقدار پیش‌فرض help_text:', err.message);
-          });
-        }
-      });
-    }
-  });
-});
-
 
 // وضعیت موقت کاربر برای مراحل مختلف
 const userState = {};
