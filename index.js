@@ -240,36 +240,36 @@ bot.on('callback_query', async (query) => {
       return bot.sendMessage(userId, '🎁 برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:\n\n📩 @Beast3694');
 
 case 'chance':
-      {
-        const now = Date.now();
-        const lastUse = await getLastChanceUse(userId);
+  {
+    const now = Date.now();
+    const lastUse = await getLastChanceUse(userId);
 
-        const diff = now - lastUse;
-if (diff < 24 * 60 * 60 * 1000) {
-  const hoursLeft = Math.ceil((24 * 60 * 60 * 1000 - diff) / (60 * 60 * 1000));
-  await bot.answerCallbackQuery(query.id, {
-    text: `شما فقط هر ۲۴ ساعت یک بار می‌توانید این گزینه را استفاده کنید. لطفا ${hoursLeft} ساعت دیگر تلاش کنید.`,
-    show_alert: true
-  });
-  return;
-}
+    const diff = now - lastUse;
+    if (diff < 24 * 60 * 60 * 1000) {
+      const hoursLeft = Math.ceil((24 * 60 * 60 * 1000 - diff) / (60 * 60 * 1000));
+      await bot.answerCallbackQuery(query.id, {
+        text: `شما فقط هر ۲۴ ساعت یک بار می‌توانید این گزینه را استفاده کنید. لطفا ${hoursLeft} ساعت دیگر تلاش کنید.`,
+        show_alert: true
+      });
+      return;
+    }
 
-        const dice = Math.floor(Math.random() * 6) + 1;
-        let message = تاس شما: ${dice}\n;
+    const dice = Math.floor(Math.random() * 6) + 1;
+    let message = `تاس شما: ${dice}\n`;
 
-        if (dice === 6) {
-          updatePoints(userId, 1);
-          message += 'تبریک! 1 امتیاز به شما اضافه شد.';
-        } else {
-          message += 'امتیازی به شما تعلق نگرفت. شانس خود را برای دفعه بعد حفظ کنید.';
-        }
+    if (dice === 6) {
+      updatePoints(userId, 1);
+      message += 'تبریک! 1 امتیاز به شما اضافه شد.';
+    } else {
+      message += 'امتیازی به شما تعلق نگرفت. شانس خود را برای دفعه بعد حفظ کنید.';
+    }
 
-        updateLastChanceUse(userId, now);
+    updateLastChanceUse(userId, now);
 
-        await bot.answerCallbackQuery(query.id);
-        await bot.sendMessage(userId, message);
-      }
-      break;
+    await bot.answerCallbackQuery(query.id);
+    await bot.sendMessage(userId, message);
+  }
+  break;
 
     case 'support':
       userState[userId] = { step: 'support' };
