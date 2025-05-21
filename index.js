@@ -31,12 +31,10 @@ db.serialize(() => {
 
   // اضافه کردن ستون last_chance_use اگر موجود نیست
   db.run(`ALTER TABLE users ADD COLUMN last_chance_use INTEGER DEFAULT 0`, (err) => {
-    // اگر ستون قبلا بود ارور میده، می‌تونیم این ارور رو نادیده بگیریم
     if (err && !err.message.includes('duplicate column name')) {
       console.error('خطا در افزودن ستون last_chance_use:', err.message);
     }
   });
-});
 
   db.run(`CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
