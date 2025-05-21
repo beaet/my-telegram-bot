@@ -24,41 +24,41 @@ app.post(`/bot${token}`, (req, res) => {
 
 const db = new sqlite3.Database('./botdata.sqlite');
 
-db.run(`ALTER TABLE users ADD COLUMN banned INTEGER DEFAULT 0`, (err) => {
-  if (err && !err.message.includes('duplicate column name')) {
-    console.error('خطا در افزودن ستون banned:', err.message);
+// اول جدول users رو ایجاد می‌کنیم اگر موجود نباشه
+db.run(`CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY,
+  banned INTEGER DEFAULT 0,
+  last_chance_use INTEGER DEFAULT 0,
+  username TEXT,
+  invites INTEGER DEFAULT 0
+)`, (err) => {
+  if (err) {
+    console.error('خطا در ایجاد جدول users:', err.message);
+  } else {
+    // چون جدول جدید ساختیم، نیازی به ALTER نیست
+    // اما اگر جدول قبلاً بوده و ستون‌ها رو نداشته، می‌تونیم ALTER بزنیم (اختیاری)
+    // اگر می‌خوای می‌تونم این بخش رو هم اضافه کنم
   }
 });
 
-// اضافه کردن ستون last_chance_use اگر موجود نیست
-db.run(`ALTER TABLE users ADD COLUMN last_chance_use INTEGER DEFAULT 0`, (err) => {
-  if (err && !err.message.includes('duplicate column name')) {
-    console.error('خطا در افزودن ستون last_chance_use:', err.message);
-  }
-});
-
-// اضافه کردن ستون username اگر موجود نیست
-db.run(`ALTER TABLE users ADD COLUMN username TEXT`, (err) => {
-  if (err && !err.message.includes('duplicate column name')) {
-    console.error('خطا در افزودن ستون username:', err.message);
-  }
-});
-
-// اضافه کردن ستون invites اگر موجود نیست
-db.run(`ALTER TABLE users ADD COLUMN invites INTEGER DEFAULT 0`, (err) => {
-  if (err && !err.message.includes('duplicate column name')) {
-    console.error('خطا در افزودن ستون invites:', err.message);
-  }
-});
-
+// ایجاد جدول settings اگر وجود نداشته باشد
 db.run(`CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT
-)`);
-
-db.get(`SELECT value FROM settings WHERE key = 'help_text'`, (err, row) => {
-  if (!row) {
-    db.run(`INSERT INTO settings (key, value) VALUES (?, ?)`, ['help_text', 'متن پیش‌فرض راهنما']);
+)`, (err) => {
+  if (err) {
+    console.error('خطا در ایجاد جدول settings:', err.message);
+  } else {
+    // چک می‌کنیم مقدار help_text وجود داشته باشد یا خیر
+    db.get(`SELECT value FROM settings WHERE key = 'help_text'`, (err, row) => {
+      if (err) {
+        console.error('خطا در خواندن settings:', err.message);
+      } else if (!row) {
+        db.run(`INSERT INTO settings (key, value) VALUES (?, ?)`, ['help_text', 'متن پیش‌فرض راهنما'], (err) => {
+          if (err) console.error('خطا در درج مقدار پیش‌فرض help_text:', err.message);
+        });
+      }
+    });
   }
 });
 
