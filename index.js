@@ -118,7 +118,10 @@ function sendMainMenu(userId) {
     }
   };
 
-  bot.sendMessage(userId, 'به ربات خوش آمدید. یکی از گزینه‌ها را انتخاب کنید.', keyboard);
+    bot.sendMessage(userId, 'سلام کاربر عزیز!
+من ربات محاسبه‌گر Mobile Legends هستم 🚀➕
+می‌تونم بهت کمک کنم ریت و برد/باخت بازی‌ات رو سریع و دقیق حساب کنی 🎮📊
+🔸 جهت شروع از دکمه‌های زیر استفاده کن ⬇️', keyboard);
 }
 
 // هندل دستور /start با امکان لینک دعوت
@@ -166,11 +169,11 @@ bot.onText(/\/panel/, async (msg) => {
           { text: '📢 پیام همگانی', callback_data: 'broadcast' }
         ],
         [
-          { text: 'بن کردن کاربر', callback_data: 'ban_user' },
-          { text: 'آن‌بن کردن کاربر', callback_data: 'unban_user' }
+          { text: '🚫بن کردن کاربر', callback_data: 'ban_user' },
+          { text: '☑️حذف بن کاربر', callback_data: 'unban_user' }
         ],
         [
-          { text: 'تغییر متن راهنما', callback_data: 'edit_help' }
+          { text: '🌐تغییر متن راهنما', callback_data: 'edit_help' }
         ]
       ]
     }
@@ -203,15 +206,11 @@ bot.on('callback_query', async (query) => {
 
     case 'referral':
       await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, `می‌خوای امتیاز بیشتری بگیری؟ 🎁
-لینک اختصاصی خودتو برای دوستات بفرست!
-هر کسی که با لینک تو وارد ربات بشه، ۵ امتیاز دائمی می‌گیری ⭐️
-
-برای دریافت لینک زیرمجموعه‌گیری، دکمه‌ی مربوطه رو بزن ⬇️:\nhttps://t.me/mlbbratebot?start=${userId}`);
+      return bot.sendMessage(userId, `لینک دعوت اختصاصی شما:\nhttps://t.me/mlbbratebot?start=${userId}`);
 
     case 'profile':
       await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, `آیدی عددی🆔: ${userId}\nامتیاز باقی‌مانده⭐: ${user.points}\nتعداد دعوتی‌ها📨: ${user.invites}`);
+      return bot.sendMessage(userId, `آیدی عددی: ${userId}\nامتیاز باقی‌مانده: ${user.points}\nتعداد دعوتی‌ها: ${user.invites}`);
 
     case 'buy':
       await bot.answerCallbackQuery(query.id);
@@ -220,10 +219,7 @@ bot.on('callback_query', async (query) => {
     case 'support':
       userState[userId] = { step: 'support' };
       await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'شما وارد بخش پشتیبانی شده‌اید!
-
-پیام شما به من فوروارد خواهد شد 📤
-برای خروج و بازگشت به منوی اصلی، دستور /start را ارسال کنید ⏪');
+      return bot.sendMessage(userId, 'شما در بخش پشتیبانی هستید. هر پیام شما به من فوروارد خواهد شد. برای خروج /start بزنید.');
 
     case 'help':
       await bot.answerCallbackQuery(query.id);
