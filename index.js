@@ -208,23 +208,18 @@ bot.on('callback_query', async (query) => {
 هر کسی که با لینک تو وارد ربات بشه، ۵ امتیاز دائمی می‌گیری ⭐️
 لینک دعوت مخصوص شما⬇️:\nhttps://t.me/mlbbratebot?start=${userId}`);
 
-        case 'profile':
+    case 'profile':
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, `🆔 آیدی عددی: ${userId}\n⭐ امتیاز فعلی: ${user.points}\n📨 تعداد دعوتی‌ها: ${user.invites}`);
 
     case 'buy':
       await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, '🎁برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:
+      return bot.sendMessage(userId, '📩برای خرید امتیاز و دسترسی به امکانات بیشتر به @Beast3694 پیام دهید');
 
-📩 @Beast3694');
-  
-  case 'support':
+    case 'support':
       userState[userId] = { step: 'support' };
       await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'شما وارد بخش پشتیبانی شده‌اید!
-
-پیام شما به من فوروارد خواهد شد 📤
-برای خروج و بازگشت به منوی اصلی، دستور /start را ارسال کنید ⏪');
+      return bot.sendMessage(userId, 'شما در بخش پشتیبانی هستید. هر پیام شما به من فوروارد خواهد شد. برای خروج /start بزنید.');
 
     case 'help':
       await bot.answerCallbackQuery(query.id);
