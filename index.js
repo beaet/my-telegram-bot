@@ -21,7 +21,6 @@ app.post(`/bot${token}`, (req, res) => {
 });
 
 // راه‌اندازی دیتابیس SQLite
-const db = new sqlite3.Database('./botdata.sqlite');
 
 const db = new sqlite3.Database('./botdata.sqlite');
 
