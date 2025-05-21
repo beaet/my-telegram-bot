@@ -118,7 +118,8 @@ function sendMainMenu(userId) {
     }
   };
 
-bot.sendMessage(userId, `سلام ${msg.from.first_name}، به ربات محاسبه‌گر Mobile Legends خوش آمدید 💫`, keyboard);
+    bot.sendMessage(userId, 'سلام، به ربات محاسبه‌گر Mobile Legends خوش آمدید ✨', keyboard);
+}
 
 // هندل دستور /start با امکان لینک دعوت
 bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
@@ -218,7 +219,7 @@ bot.on('callback_query', async (query) => {
     case 'support':
       userState[userId] = { step: 'support' };
       await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'شما در بخش پشتیبانی هستید. هر پیام شما به من فوروارد خواهد شد. برای خروج /start بزنید.');
+      return bot.sendMessage(userId, 'شما وارد بخش پشتیبانی شده‌اید!\nپیام شما به من فوروارد خواهد شد 📤\nبرای خروج و بازگشت به منوی اصلی، دستور /start را ارسال کنید ⏪');
 
     case 'help':
       await bot.answerCallbackQuery(query.id);
