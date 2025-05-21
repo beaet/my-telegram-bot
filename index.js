@@ -41,6 +41,18 @@ const db = new sqlite3.Database('./botdata.sqlite', (err) => {
     }
   });
 
+db.run("ALTER TABLE users ADD COLUMN points INTEGER DEFAULT 0", (err) => {
+  if (err) {
+    if (err.message.includes("duplicate column name")) {
+      console.log("ستون points قبلاً اضافه شده");
+    } else {
+      console.error("خطا در افزودن ستون points:", err.message);
+    }
+  } else {
+    console.log("ستون points با موفقیت اضافه شد");
+  }
+});
+
   // ایجاد جدول settings اگر وجود نداشته باشد
   db.run(`CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
