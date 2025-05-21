@@ -203,7 +203,10 @@ bot.on('callback_query', async (query) => {
 
     case 'referral':
       await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, `لینک دعوت اختصاصی شما:\nhttps://t.me/mlbbratebot?start=${userId}`);
+      return bot.sendMessage(userId, `می‌خوای امتیاز بیشتری بگیری؟ 🎁
+لینک اختصاصی خودتو برای دوستات بفرست!
+هر کسی که با لینک تو وارد ربات بشه، ۵ امتیاز دائمی می‌گیری ⭐️
+لینک دعوت مخصوص شما⬇️:\nhttps://t.me/mlbbratebot?start=${userId}`);
 
     case 'profile':
       await bot.answerCallbackQuery(query.id);
