@@ -98,30 +98,27 @@ function sendMainMenu(userId) {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: '📊محاسبه ریت', callback_data: 'calculate_rate' },
-          { text: '🏆محاسبه برد/باخت', callback_data: 'calculate_wl' }
+          { text: 'محاسبه ریت', callback_data: 'calculate_rate' },
+          { text: 'محاسبه برد/باخت', callback_data: 'calculate_wl' }
         ],
         [
-          { text: '🔗دعوت دوستان', callback_data: 'referral' },
-          { text: '👤 پروفایل', callback_data: 'profile' }
+          { text: 'دریافت لینک دعوت', callback_data: 'referral' },
+          { text: 'حساب کاربری', callback_data: 'profile' }
         ],
         [
-          { text: '💬پشتیبانی', callback_data: 'support' }
+          { text: 'پشتیبانی', callback_data: 'support' }
         ],
         [
-          { text: '📚راهنما', callback_data: 'help' }
+          { text: 'راهنما', callback_data: 'help' }
         ],
         [
-          { text: '🎁خرید امتیاز', callback_data: 'buy' }
+          { text: 'خرید امتیاز', callback_data: 'buy' }
         ]
       ]
     }
   };
 
-  bot.sendMessage(userId, 'سلام کاربر عزیز!
-من ربات محاسبه‌گر Mobile Legends هستم 🚀➕
-می‌تونم بهت کمک کنم ریت و برد/باخت بازی‌ات رو سریع و دقیق حساب کنی 🎮📊
-🔸 جهت شروع از دکمه‌های زیر استفاده کن ⬇️', keyboard);
+  bot.sendMessage(userId, 'به ربات خوش آمدید. یکی از گزینه‌ها را انتخاب کنید.', keyboard);
 }
 
 // هندل دستور /start با امکان لینک دعوت
