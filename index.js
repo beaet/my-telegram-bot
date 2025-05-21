@@ -36,6 +36,13 @@ db.serialize(() => {
     }
   });
 
+  // اضافه کردن ستون username اگر موجود نیست
+  db.run(`ALTER TABLE users ADD COLUMN username TEXT`, (err) => {
+    if (err && !err.message.includes('duplicate column name')) {
+      console.error('خطا در افزودن ستون username:', err.message);
+    }
+  });
+
   db.run(`CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT
