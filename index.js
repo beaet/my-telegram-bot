@@ -1,11 +1,7 @@
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
-const db = new sqlite3.Database('./botdata.sqlite', (err) => {
-  if (err) {
-    console.error('خطا در باز کردن دیتابیس:', err.message);
-    return;
-  }
+
 const app = express();
 
 const token = '8129314550:AAFQTvL8VVg-4QtQD8QLY03LCWiSP1uaCak';  // توکن ربات
@@ -25,9 +21,14 @@ app.post(`/bot${token}`, (req, res) => {
   res.sendStatus(200);
 });
 
-// راه‌اندازی دیتابیس SQLite
+// باز کردن دیتابیس و ایجاد جدول‌ها
+const db = new sqlite3.Database('./botdata.sqlite', (err) => {
+  if (err) {
+    console.error('خطا در باز کردن دیتابیس:', err.message);
+    return;
+  }
 
-  // ایجاد جدول users اگر وجود نداشته باشد (با همه ستون‌های لازم)
+  // ایجاد جدول users اگر وجود نداشته باشد
   db.run(`CREATE TABLE IF NOT EXISTS users (
     user_id INTEGER PRIMARY KEY,
     banned INTEGER DEFAULT 0,
@@ -60,7 +61,11 @@ app.post(`/bot${token}`, (req, res) => {
       });
     }
   });
+});
 
+// استارت سرور
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
 });
 
 // وضعیت موقت کاربر برای مراحل مختلف
