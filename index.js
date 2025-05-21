@@ -63,10 +63,6 @@ const db = new sqlite3.Database('./botdata.sqlite', (err) => {
   });
 });
 
-// استارت سرور
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
-});
 
 // وضعیت موقت کاربر برای مراحل مختلف
 const userState = {};
