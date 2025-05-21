@@ -226,7 +226,6 @@ bot.on('callback_query', async (query) => {
       userState[userId] = { step: 'support' };
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, 'شما وارد بخش پشتیبانی شده‌اید!
-
 پیام شما به من فوروارد خواهد شد 📤
 برای خروج و بازگشت به منوی اصلی، دستور /start را ارسال کنید ⏪');
 
