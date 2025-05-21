@@ -118,7 +118,7 @@ function sendMainMenu(userId) {
     }
   };
 
-  bot.sendMessage(userId, '• سلام کاربر عزیز!
+  bot.sendMessage(userId, 'سلام کاربر عزیز!
 من ربات محاسبه‌گر Mobile Legends هستم 🚀➕
 می‌تونم بهت کمک کنم ریت و برد/باخت بازی‌ات رو سریع و دقیق حساب کنی 🎮📊
 🔸 جهت شروع از دکمه‌های زیر استفاده کن ⬇️', keyboard);
