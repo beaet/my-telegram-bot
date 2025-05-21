@@ -26,11 +26,17 @@ const db = new sqlite3.Database('./botdata.sqlite');
 db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS users (
     user_id INTEGER PRIMARY KEY,
-    username TEXT,
-    points INTEGER DEFAULT 5,
-    invites INTEGER DEFAULT 0,
-    banned INTEGER DEFAULT 0
+    points INTEGER DEFAULT 0
   )`);
+
+  // اضافه کردن ستون last_chance_use اگر موجود نیست
+  db.run(`ALTER TABLE users ADD COLUMN last_chance_use INTEGER DEFAULT 0`, (err) => {
+    // اگر ستون قبلا بود ارور میده، می‌تونیم این ارور رو نادیده بگیریم
+    if (err && !err.message.includes('duplicate column name')) {
+      console.error('خطا در افزودن ستون last_chance_use:', err.message);
+    }
+  });
+});
 
   db.run(`CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
@@ -65,6 +71,19 @@ function getUser(userId) {
 // آپدیت امتیاز کاربر (مثبت یا منفی)
 function updatePoints(userId, amount) {
   db.run(`UPDATE users SET points = points + ? WHERE user_id = ?`, [amount, userId]);
+}
+
+function updateLastChanceUse(userId, timestamp) {
+  db.run(`UPDATE users SET last_chance_use = ? WHERE user_id = ?`, [timestamp, userId]);
+}
+
+function getLastChanceUse(userId) {
+  return new Promise((resolve, reject) => {
+    db.get(`SELECT last_chance_use FROM users WHERE user_id = ?`, [userId], (err, row) => {
+      if (err) reject(err);
+      else resolve(row ? row.last_chance_use : 0);
+    });
+  });
 }
 
 // تغییر وضعیت بن کاربر
@@ -112,11 +131,15 @@ function sendMainMenu(userId) {
           { text: '📚راهنما', callback_data: 'help' }
         ],
         [
-          { text: '🎁خرید امتیاز', callback_data: 'buy' }
+           { text: '🎁خرید امتیاز', callback_data: 'buy' }
+        ],
+        [ // این ردیف دکمه شانس اضافه شده
+          { text: '🍀 شانس', callback_data: 'chance' }
         ]
       ]
     }
   };
+
 
     bot.sendMessage(userId, 'سلام، به ربات محاسبه‌گر Mobile Legends خوش آمدید ✨', keyboard);
 }
@@ -215,6 +238,38 @@ bot.on('callback_query', async (query) => {
     case 'buy':
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, '🎁 برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:\n\n📩 @Beast3694');
+
+case 'chance':
+      {
+        const now = Date.now();
+        const lastUse = await getLastChanceUse(userId);
+
+        const diff = now - lastUse;
+if (diff < 24 * 60 * 60 * 1000) {
+  const hoursLeft = Math.ceil((24 * 60 * 60 * 1000 - diff) / (60 * 60 * 1000));
+  await bot.answerCallbackQuery(query.id, {
+    text: `شما فقط هر ۲۴ ساعت یک بار می‌توانید این گزینه را استفاده کنید. لطفا ${hoursLeft} ساعت دیگر تلاش کنید.`,
+    show_alert: true
+  });
+  return;
+}
+
+        const dice = Math.floor(Math.random() * 6) + 1;
+        let message = تاس شما: ${dice}\n;
+
+        if (dice === 6) {
+          updatePoints(userId, 1);
+          message += 'تبریک! 1 امتیاز به شما اضافه شد.';
+        } else {
+          message += 'امتیازی به شما تعلق نگرفت. شانس خود را برای دفعه بعد حفظ کنید.';
+        }
+
+        updateLastChanceUse(userId, now);
+
+        await bot.answerCallbackQuery(query.id);
+        await bot.sendMessage(userId, message);
+      }
+      break;
 
     case 'support':
       userState[userId] = { step: 'support' };
