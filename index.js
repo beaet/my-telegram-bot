@@ -98,27 +98,30 @@ function sendMainMenu(userId) {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: 'محاسبه ریت', callback_data: 'calculate_rate' },
-          { text: 'محاسبه برد/باخت', callback_data: 'calculate_wl' }
+          { text: '📊محاسبه ریت', callback_data: 'calculate_rate' },
+          { text: '🏆محاسبه برد/باخت', callback_data: 'calculate_wl' }
         ],
         [
-          { text: 'دریافت لینک دعوت', callback_data: 'referral' },
-          { text: 'حساب کاربری', callback_data: 'profile' }
+          { text: '🔗دعوت دوستان', callback_data: 'referral' },
+          { text: '👤 پروفایل', callback_data: 'profile' }
         ],
         [
-          { text: 'پشتیبانی', callback_data: 'support' }
+          { text: '💬پشتیبانی', callback_data: 'support' }
         ],
         [
-          { text: 'راهنما', callback_data: 'help' }
+          { text: '📚راهنما', callback_data: 'help' }
         ],
         [
-          { text: 'خرید امتیاز', callback_data: 'buy' }
+          { text: '🎁خرید امتیاز', callback_data: 'buy' }
         ]
       ]
     }
   };
 
-  bot.sendMessage(userId, 'به ربات خوش آمدید. یکی از گزینه‌ها را انتخاب کنید.', keyboard);
+  bot.sendMessage(userId, '• سلام {name} عزیز!
+من ربات محاسبه‌گر Mobile Legends هستم 🚀➕
+می‌تونم بهت کمک کنم ریت و برد/باخت بازی‌ات رو سریع و دقیق حساب کنی 🎮📊
+🔸 جهت شروع از دکمه‌های زیر استفاده کن ⬇️', keyboard);
 }
 
 // هندل دستور /start با امکان لینک دعوت
@@ -166,11 +169,11 @@ bot.onText(/\/panel/, async (msg) => {
           { text: '📢 پیام همگانی', callback_data: 'broadcast' }
         ],
         [
-          { text: 'بن کردن کاربر', callback_data: 'ban_user' },
-          { text: 'آن‌بن کردن کاربر', callback_data: 'unban_user' }
+          { text: '🚫بن کردن کاربر', callback_data: 'ban_user' },
+          { text: '☑️حذف بن کاربر', callback_data: 'unban_user' }
         ],
         [
-          { text: 'تغییر متن راهنما', callback_data: 'edit_help' }
+          { text: '🌐تغییر متن راهنما', callback_data: 'edit_help' }
         ]
       ]
     }
@@ -203,15 +206,21 @@ bot.on('callback_query', async (query) => {
 
     case 'referral':
       await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, `لینک دعوت اختصاصی شما:\nhttps://t.me/mlbbratebot?start=${userId}`);
+      return bot.sendMessage(userId, `می‌خوای امتیاز بیشتری بگیری؟ 🎁
+لینک اختصاصی خودتو برای دوستات بفرست!
+هر کسی که با لینک تو وارد ربات بشه، ۵ امتیاز دائمی می‌گیری ⭐️
+
+لینک دعوت مخصوص شما⬇️:\nhttps://t.me/mlbbratebot?start=${userId}`);
 
     case 'profile':
       await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, `آیدی عددی: ${userId}\nامتیاز باقی‌مانده: ${user.points}\nتعداد دعوتی‌ها: ${user.invites}`);
+      return bot.sendMessage(userId, `🆔 آیدی عددی: ${userId}\n⭐ امتیاز فعلی: ${user.points}\n📨 تعداد دعوتی‌ها: ${user.invites}`);
 
     case 'buy':
       await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'برای خرید امتیاز به پیوی @Beast3694 مراجعه کنید.');
+      return bot.sendMessage(userId, '🎁برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:
+
+📩 @Beast3694');
 
     case 'support':
       userState[userId] = { step: 'support' };
