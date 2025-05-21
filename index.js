@@ -215,8 +215,7 @@ bot.on('callback_query', async (query) => {
 
     case 'buy':
       await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, '🎁برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:
-
+      return bot.sendMessage(userId, '🎁برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید
 📩 @Beast3694');
 
     case 'support':
