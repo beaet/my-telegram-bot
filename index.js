@@ -24,7 +24,7 @@ app.post(`/bot${token}`, (req, res) => {
 
 const db = new sqlite3.Database('./botdata.sqlite');
 
-// اول جدول users رو ایجاد می‌کنیم اگر موجود نباشه
+// ایجاد جدول users اگر وجود نداشته باشد (با همه ستون‌های لازم)
 db.run(`CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY,
   banned INTEGER DEFAULT 0,
@@ -34,10 +34,6 @@ db.run(`CREATE TABLE IF NOT EXISTS users (
 )`, (err) => {
   if (err) {
     console.error('خطا در ایجاد جدول users:', err.message);
-  } else {
-    // چون جدول جدید ساختیم، نیازی به ALTER نیست
-    // اما اگر جدول قبلاً بوده و ستون‌ها رو نداشته، می‌تونیم ALTER بزنیم (اختیاری)
-    // اگر می‌خوای می‌تونم این بخش رو هم اضافه کنم
   }
 });
 
@@ -49,7 +45,7 @@ db.run(`CREATE TABLE IF NOT EXISTS settings (
   if (err) {
     console.error('خطا در ایجاد جدول settings:', err.message);
   } else {
-    // چک می‌کنیم مقدار help_text وجود داشته باشد یا خیر
+    // چک کردن وجود مقدار help_text و در صورت نبود، اضافه کردن مقدار پیش‌فرض
     db.get(`SELECT value FROM settings WHERE key = 'help_text'`, (err, row) => {
       if (err) {
         console.error('خطا در خواندن settings:', err.message);
