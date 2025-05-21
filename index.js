@@ -23,11 +23,20 @@ app.post(`/bot${token}`, (req, res) => {
 // راه‌اندازی دیتابیس SQLite
 const db = new sqlite3.Database('./botdata.sqlite');
 
+const db = new sqlite3.Database('./botdata.sqlite');
+
 db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS users (
     user_id INTEGER PRIMARY KEY,
     points INTEGER DEFAULT 0
   )`);
+
+  // اضافه کردن ستون banned اگر موجود نیست
+  db.run(`ALTER TABLE users ADD COLUMN banned INTEGER DEFAULT 0`, (err) => {
+    if (err && !err.message.includes('duplicate column name')) {
+      console.error('خطا در افزودن ستون banned:', err.message);
+    }
+  });
 
   // اضافه کردن ستون last_chance_use اگر موجود نیست
   db.run(`ALTER TABLE users ADD COLUMN last_chance_use INTEGER DEFAULT 0`, (err) => {
@@ -61,8 +70,14 @@ const userState = {};
 // کمک برای ایجاد یا اطمینان از وجود کاربر در دیتابیس
 function ensureUser(user) {
   db.get(`SELECT user_id FROM users WHERE user_id = ?`, [user.id], (err, row) => {
+    if (err) {
+      console.error('خطا در انتخاب کاربر:', err);
+      return;
+    }
     if (!row) {
-      db.run(`INSERT INTO users (user_id, username, points) VALUES (?, ?, 5)`, [user.id, user.username || '']);
+      db.run(`INSERT INTO users (user_id, username, points) VALUES (?, ?, 5)`, [user.id, user.username || ''], (err) => {
+        if (err) console.error('خطا در درج کاربر جدید:', err);
+      });
     }
   });
 }
