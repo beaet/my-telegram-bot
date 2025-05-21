@@ -22,40 +22,47 @@ app.post(`/bot${token}`, (req, res) => {
 
 // راه‌اندازی دیتابیس SQLite
 
-const db = new sqlite3.Database('./botdata.sqlite');
-
-// ایجاد جدول users اگر وجود نداشته باشد (با همه ستون‌های لازم)
-db.run(`CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY,
-  banned INTEGER DEFAULT 0,
-  last_chance_use INTEGER DEFAULT 0,
-  username TEXT,
-  invites INTEGER DEFAULT 0
-)`, (err) => {
+const sqlite3 = require('sqlite3').verbose();
+const db = new sqlite3.Database('./botdata.sqlite', (err) => {
   if (err) {
-    console.error('خطا در ایجاد جدول users:', err.message);
+    console.error('خطا در باز کردن دیتابیس:', err.message);
+    return;
   }
-});
 
-// ایجاد جدول settings اگر وجود نداشته باشد
-db.run(`CREATE TABLE IF NOT EXISTS settings (
-  key TEXT PRIMARY KEY,
-  value TEXT
-)`, (err) => {
-  if (err) {
-    console.error('خطا در ایجاد جدول settings:', err.message);
-  } else {
-    // چک کردن وجود مقدار help_text و در صورت نبود، اضافه کردن مقدار پیش‌فرض
-    db.get(`SELECT value FROM settings WHERE key = 'help_text'`, (err, row) => {
-      if (err) {
-        console.error('خطا در خواندن settings:', err.message);
-      } else if (!row) {
-        db.run(`INSERT INTO settings (key, value) VALUES (?, ?)`, ['help_text', 'متن پیش‌فرض راهنما'], (err) => {
-          if (err) console.error('خطا در درج مقدار پیش‌فرض help_text:', err.message);
-        });
-      }
-    });
-  }
+  // ایجاد جدول users اگر وجود نداشته باشد (با همه ستون‌های لازم)
+  db.run(`CREATE TABLE IF NOT EXISTS users (
+    user_id INTEGER PRIMARY KEY,
+    banned INTEGER DEFAULT 0,
+    last_chance_use INTEGER DEFAULT 0,
+    username TEXT,
+    invites INTEGER DEFAULT 0
+  )`, (err) => {
+    if (err) {
+      console.error('خطا در ایجاد جدول users:', err.message);
+    }
+  });
+
+  // ایجاد جدول settings اگر وجود نداشته باشد
+  db.run(`CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+  )`, (err) => {
+    if (err) {
+      console.error('خطا در ایجاد جدول settings:', err.message);
+    } else {
+      // چک کردن وجود مقدار help_text و در صورت نبود، اضافه کردن مقدار پیش‌فرض
+      db.get(`SELECT value FROM settings WHERE key = 'help_text'`, (err, row) => {
+        if (err) {
+          console.error('خطا در خواندن settings:', err.message);
+        } else if (!row) {
+          db.run(`INSERT INTO settings (key, value) VALUES (?, ?)`, ['help_text', 'متن پیش‌فرض راهنما'], (err) => {
+            if (err) console.error('خطا در درج مقدار پیش‌فرض help_text:', err.message);
+          });
+        }
+      });
+    }
+  });
+
 });
 
 // وضعیت موقت کاربر برای مراحل مختلف
