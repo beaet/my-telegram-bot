@@ -374,7 +374,7 @@ bot.on('message', async (msg) => {
 
   const state = userState[userId];
 
-  // لغو عملیات با /cancel
+  // لغو عملیات
   if (text === '/cancel') {
     delete userState[userId];
     return bot.sendMessage(userId, 'عملیات لغو شد.', { reply_markup: { remove_keyboard: true } });
@@ -432,38 +432,6 @@ bot.on('message', async (msg) => {
         delete userState[userId];
         return bot.sendMessage(userId, 'متن راهنما با موفقیت به‌روزرسانی شد.');
 
-      default:
-        return bot.sendMessage(userId, 'مرحله نامشخص است.');
-    }
-  } else {
-    // مراحل محاسبه ریت یا برد/باخت برای کاربران عادی
-    switch (state.step) {
-      case 'total':
-        const total = parseInt(text);
-        if (isNaN(total)) return bot.sendMessage(userId, 'تعداد کل بازی‌ها را به صورت عدد وارد کن.');
-        state.total = total;
-        state.step = 'rate';
-        return bot.sendMessage(userId, 'ریت فعلی را وارد کن (مثلاً 55):');
-
-      case 'rate':
-        const rate = parseFloat(text);
-        if (isNaN(rate)) return bot.sendMessage(userId, 'درصد ریت را به صورت عدد وارد کن.');
-        
-        if (state.type === 'rate') {
-          state.rate = rate;
-          state.step = 'target';
-          return bot.sendMessage(userId, 'ریت هدف را وارد کن:');
-        } else {
-          const wins = Math.round((state.total * rate) / 100);
-          const losses = state.total - wins;
-
-          await updatePoints(userId, -1);
-          delete userState[userId];
-
-          await bot.sendMessage(userId, `برد: ${wins} | باخت: ${losses}\nامتیاز باقی‌مانده: ${user.points - 1}`);
-          return sendMainMenu(userId);
-        }
-
       case 'target':
         const target = parseFloat(text);
         if (isNaN(target)) return bot.sendMessage(userId, 'ریت هدف را به صورت عدد وارد کن.');
@@ -480,16 +448,19 @@ bot.on('message', async (msg) => {
       default:
         return bot.sendMessage(userId, 'مرحله نامشخص است.');
     }
-  }
-});
+  } else {
+    // بخش کاربران عادی یا سایر مراحل
 
-  // مرحله پشتیبانی: فوروارد پیام به ادمین
-  if (state.step === 'support') {
-    if (msg.text || msg.photo || msg.video || msg.sticker) {
-      // فوروارد پیام به ادمین
-      bot.forwardMessage(adminId, userId, msg.message_id);
-      return bot.sendMessage(userId, 'پیام شما ارسال شد. برای خروج /start را بزنید.');
+    // مرحله پشتیبانی: فوروارد پیام به ادمین
+    if (state.step === 'support') {
+      if (msg.text || msg.photo || msg.video || msg.sticker) {
+        await bot.forwardMessage(adminId, userId, msg.message_id);
+        return bot.sendMessage(userId, 'پیام شما ارسال شد. برای خروج /start را بزنید.');
+      }
     }
+
+    // اینجا میتونی بقیه منطق کاربران عادی رو اضافه کنی
+    return bot.sendMessage(userId, 'شما اجازه دسترسی به این بخش را ندارید.');
   }
 });
   
