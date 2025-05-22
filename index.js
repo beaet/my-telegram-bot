@@ -311,31 +311,21 @@ bot.on('callback_query', async (query) => {
       });
     });
 
-    for (const row of rows) {
-      await updatePoints(row.user_id, amount);
-    }
-
-    await bot.sendMessage(userId, `امتیاز ${amount} به تمام کاربران فعال اضافه شد.`);
-
-    for (const [index, row] of rows.entries()) {
-      setTimeout(() => {
-        bot.sendMessage(row.user_id, `📢 امتیاز ${amount} از طرف پنل مدیریت به حساب شما افزوده شد.`);
-      }, index * 100);
-    }
-
-  } catch (error) {
-    await bot.sendMessage(userId, 'خطا در دریافت کاربران.');
-  }
-
-  resetUserState(userId);
-  return;
-}
     case 'referral':
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, `می‌خوای امتیاز بیشتری بگیری؟ 🎁
 لینک اختصاصی خودتو برای دوستات بفرست!
 هر کسی که با لینک تو وارد ربات بشه، ۵ امتیاز دائمی می‌گیری ⭐️
 لینک دعوت مخصوص شما⬇️:\nhttps://t.me/mlbbratebot?start=${userId}`);
+
+case 'add_points_all':
+  if (userId !== adminId) {
+    await bot.answerCallbackQuery(query.id, { text: 'شما دسترسی ندارید.', show_alert: true });
+    return;
+  }
+  userState[userId] = { step: 'add_points_all_enter' };
+  await bot.answerCallbackQuery(query.id);
+  return bot.sendMessage(userId, 'مقدار امتیازی که می‌خواهید به همه بدهید را وارد کنید:');
 
     case 'profile':
       await bot.answerCallbackQuery(query.id);
@@ -434,6 +424,41 @@ bot.on('message', async (msg) => {
   if (user?.banned) {
     return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده ندارید.');
   }
+  
+  if (state.step === 'add_points_all_enter') {
+  if (!/^\d+$/.test(text)) {
+    return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید یا /cancel برای لغو.');
+  }
+  const amount = parseInt(text);
+
+  try {
+    const rows = await new Promise((resolve, reject) => {
+      db.all(`SELECT user_id FROM users WHERE banned=0`, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    });
+
+    for (const row of rows) {
+      await updatePoints(row.user_id, amount);
+    }
+
+    await bot.sendMessage(userId, `امتیاز ${amount} به تمام کاربران فعال اضافه شد.`);
+
+    // اطلاع‌رسانی به کاربران
+    for (const [index, row] of rows.entries()) {
+      setTimeout(() => {
+        bot.sendMessage(row.user_id, `📢 امتیاز ${amount} از طرف پنل مدیریت به حساب شما افزوده شد.`);
+      }, index * 100);
+    }
+
+  } catch (error) {
+    await bot.sendMessage(userId, 'خطا در دریافت کاربران.');
+  }
+
+  resetUserState(userId);
+  return;
+}
 
   const state = userState[userId];
 
