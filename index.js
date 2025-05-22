@@ -186,16 +186,25 @@ bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
 
   // مدیریت دعوت
 if (refId && refId !== userId) {
-  db.get(`SELECT invites FROM users WHERE user_id = ?`, [userId], (err, row) => {
+  // اول چک کن ببین کاربر دعوت‌شده تو دیتابیس هست یا نه
+  db.get(`SELECT user_id FROM users WHERE user_id = ?`, [userId], (err, row) => {
+    if (err) {
+      console.error('خطا در چک کردن کاربر:', err);
+      return;
+    }
     if (!row) {
-      // کاربر جدیدی که دعوت شده
-      db.run(`INSERT INTO users (user_id, username, points, invites) VALUES (?, ?, 5, 0)`, [userId, msg.from.username || '']);
-      
-      // به دعوت‌کننده امتیاز اضافه کن
-      updatePoints(refId, 5);
+      // اگر کاربر جدید بود، ثبتش کن
+      db.run(`INSERT INTO users (user_id, username, points, invites) VALUES (?, ?, 5, 0)`, [userId, msg.from.username || ''], (err) => {
+        if (err) {
+          console.error('خطا در درج کاربر جدید:', err);
+          return;
+        }
+        // به دعوت‌کننده ۵ امتیاز اضافه کن
+        updatePoints(refId, 5);
 
-      // افزایش تعداد دعوتی‌ها برای دعوت‌کننده
-      db.run(`UPDATE users SET invites = invites + 1 WHERE user_id = ?`, [refId]);
+        // افزایش تعداد دعوتی‌ها برای دعوت‌کننده
+        db.run(`UPDATE users SET invites = invites + 1 WHERE user_id = ?`, [refId]);
+      });
     }
   });
 }
