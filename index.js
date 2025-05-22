@@ -93,7 +93,7 @@ bot.on('message', (msg) => {
   if (msg.text && msg.text.startsWith('/start')) {
     const parts = msg.text.split(' ');
     if (parts.length > 1) {
-      refId = parts[1];
+      refId = parts[1];  // شناسه دعوت‌کننده
     }
 
     db.get(`SELECT * FROM users WHERE user_id = ?`, [userId], (err, row) => {
@@ -101,16 +101,16 @@ bot.on('message', (msg) => {
         console.error(err);
         return;
       }
+
       if (!row) {
-        // ثبت کاربر جدید
-        db.run(`INSERT INTO users (user_id, username, points, invites) VALUES (?, ?, 0, 0)`, [userId, msg.from.username || ''], (err) => {
+        // کاربر جدید - امتیاز اولیه 5
+        db.run(`INSERT INTO users (user_id, username, points, invites) VALUES (?, ?, 5, 0)`, [userId, msg.from.username || ''], (err) => {
           if (err) {
             console.error(err);
             return;
           }
 
-          if (refId && refId !== userId) {
-            // اضافه کردن امتیاز دعوت‌کننده
+          if (refId && refId != userId) {
             updatePoints(refId, 5);
 
             db.run(`UPDATE users SET invites = invites + 1 WHERE user_id = ?`, [refId], (err) => {
@@ -118,17 +118,25 @@ bot.on('message', (msg) => {
                 console.error(err);
                 return;
               }
-              // ارسال پیام به دعوت‌کننده
-              bot.sendMessage(refId, `🚀 کاربر *${msg.from.username || userId}* با لینک دعوت شما وارد شد! ✨ شما ۵ امتیاز جایزه گرفتید!`, { parse_mode: 'Markdown' });
+              // پیام اطلاع‌رسانی به دعوت‌کننده با ایموجی
+              bot.sendMessage(refId, `🚀 کاربر *${msg.from.username || userId}* با لینک دعوت شما وارد شد! ✨ شما ۵ امتیاز جایزه گرفتید!`, {parse_mode: 'Markdown'});
             });
           }
         });
-      } else {
-        // اگر کاربر قبلاً ثبت شده بود، می‌تونی اینجا کاری نکنی یا پیام خوش آمد بگی
       }
     });
   }
 });
+
+function updatePoints(userId, amount) {
+  db.run(`UPDATE users SET points = points + ? WHERE user_id = ?`, [amount, userId], (err) => {
+    if (err) {
+      console.error('خطا در افزایش امتیاز:', err);
+    } else {
+      console.log(`امتیاز ${amount} به کاربر ${userId} اضافه شد.`);
+    }
+  });
+}
 
 // گرفتن اطلاعات کاربر از دیتابیس
 function getUser(userId) {
