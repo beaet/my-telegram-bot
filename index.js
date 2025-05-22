@@ -323,39 +323,47 @@ return bot.sendMessage(userId, `🆔 آیدی عددی: ${userId}\n⭐ امتی�
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, '🎁 برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:\n\n📩 @Beast3694');
 
-case 'add_points_all_enter':
-  if (!/^\d+$/.test(text)) {
-    return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید یا /cancel برای لغو.');
-  }
-  const amount = parseInt(text);
+case 'add_points_all_enter': {
+    if (!/^\d+$/.test(text)) {
+      return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید یا /cancel برای لغو.');
+    }
+    const amount = parseInt(text);
 
-  db.all(`SELECT user_id FROM users WHERE banned=0`, async (err, rows) => {
-    if (err) {
-      await bot.sendMessage(userId, 'خطا در دریافت کاربران.');
+    db.all(`SELECT user_id FROM users WHERE banned=0`, async (err, rows) => {
+      if (err) {
+        await bot.sendMessage(userId, 'خطا در دریافت کاربران.');
+        resetUserState(userId);
+        return;
+      }
+
+      for (const row of rows) {
+        await updatePoints(row.user_id, amount);
+      }
+
+      await bot.sendMessage(userId, `امتیاز ${amount} به تمام کاربران فعال اضافه شد.`);
+
+      for (const [index, row] of rows.entries()) {
+        setTimeout(() => {
+          bot.sendMessage(row.user_id, `📢 امتیاز ${amount} از طرف پنل مدیریت به حساب شما افزوده شد.`);
+        }, index * 100);
+      }
+
       resetUserState(userId);
-      return;
-    }
+    });
 
-    for (const row of rows) {
-      await updatePoints(row.user_id, amount);
-    }
+    return;  // به جای break، return بگذارید تا از switch خارج شود
+  }
 
-    await bot.sendMessage(userId, `امتیاز ${amount} به تمام کاربران فعال اضافه شد.`);
+  case 'chance': {
+    // کدهای مربوط به 'chance'
+    // اگر async است، حتما از async/await درست استفاده کنید و در آخر break بگذارید
+    break;
+  }
 
-    for (const [index, row] of rows.entries()) {
-      setTimeout(() => {
-        bot.sendMessage(row.user_id, `📢 امتیاز ${amount} از طرف پنل مدیریت به حساب شما افزوده شد.`);
-      }, index * 100);
-    }
-
-    resetUserState(userId);
-  });
-
-  // اینجا دیگه نباید break بزارید چون db.all asyncه و این خط خارج از switch حساب میشه
-  return;  // یا return چیزی که تو async تابع اصلی هست
-
-case 'chance':
-  // بقیه کد اینجا
+  default:
+    // سایر caseها
+    break;
+}
 
     const dice = Math.floor(Math.random() * 6) + 1;
     let message = `تاس شما: ${dice}\n`;
