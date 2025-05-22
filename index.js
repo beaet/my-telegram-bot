@@ -613,7 +613,7 @@ someFunction();
     sendMainMenu(userId);
   }
 
-  // مرحله پشتیبانی: فوروارد پیام به ادمین
+  // مرحله پشتیبانی: پیام به ادمین
   if (state.step === 'support') {
     if (msg.message_id) {
       try {
