@@ -600,6 +600,7 @@ bot.on('message', async (msg) => {
   }
 });
 
+   switch (userState) {
       case 'broadcast':
     resetUserState(userId);
     bot.sendMessage(userId, 'پیام در حال ارسال به همه کاربران...');
