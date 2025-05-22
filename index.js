@@ -18,13 +18,8 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getDatabase(firebaseApp);
 
-// ---- Helper Functions for Firebase ----
+// ---- Helper Functions ----
 const userRef = userId => ref(db, `users/${userId}`);
-const giftCodeRef = code => ref(db, `gift_codes/${code}`);
-const globalGiftCodeRef = code => ref(db, `global_gift_codes/${code}`);
-const settingsRef = key => ref(db, `settings/${key}`);
-
-// Ensure user exists in Firebase (if not, create with default data)
 async function ensureUser(user) {
   const snap = await get(userRef(user.id));
   if (!snap.exists()) {
@@ -34,20 +29,18 @@ async function ensureUser(user) {
       last_chance_use: 0,
       username: user.username || '',
       invites: 0,
-      points: 5
+      points: 5,
+      invited_by: null
     });
   }
 }
-
 async function getUser(userId) {
   const snap = await get(userRef(userId));
   return snap.exists() ? snap.val() : null;
 }
 async function updatePoints(userId, amount) {
   const user = await getUser(userId);
-  if (user) {
-    await update(userRef(userId), { points: (user.points || 0) + amount });
-  }
+  if (user) await update(userRef(userId), { points: (user.points || 0) + amount });
 }
 async function updateLastChanceUse(userId, timestamp) {
   await update(userRef(userId), { last_chance_use: timestamp });
@@ -55,6 +48,9 @@ async function updateLastChanceUse(userId, timestamp) {
 async function setBanStatus(userId, status) {
   await update(userRef(userId), { banned: status ? 1 : 0 });
 }
+const giftCodeRef = code => ref(db, `gift_codes/${code}`);
+const globalGiftCodeRef = code => ref(db, `global_gift_codes/${code}`);
+const settingsRef = key => ref(db, `settings/${key}`);
 async function getHelpText() {
   const snap = await get(settingsRef('help_text'));
   return snap.exists() ? snap.val() : 'متن راهنما موجود نیست.';
@@ -91,14 +87,12 @@ async function deleteGlobalGiftCode(code) {
   await remove(globalGiftCodeRef(code));
 }
 async function listGiftCodesCombined() {
-  // Single-use codes
   const codesSnap = await get(ref(db, 'gift_codes'));
   const codes = codesSnap.exists() ? Object.keys(codesSnap.val()).map(code => ({
     type: 'یکبارمصرف',
     code,
     points: codesSnap.val()[code]
   })) : [];
-  // Global codes
   const globalSnap = await get(ref(db, 'global_gift_codes'));
   const gCodes = globalSnap.exists()
     ? Object.keys(globalSnap.val()).map(code => ({
@@ -110,10 +104,23 @@ async function listGiftCodesCombined() {
   return codes.concat(gCodes);
 }
 
-// User state (in-memory, not persistent)
-const userState = {};
+// ---- Anti-Spam ----
+const buttonSpamMap = {}; // { userId: [timestamps] }
+const muteMap = {}; // { userId: muteUntilTimestamp }
+function isMuted(userId) {
+  if (!muteMap[userId]) return false;
+  if (Date.now() > muteMap[userId]) {
+    delete muteMap[userId];
+    return false;
+  }
+  return true;
+}
 
-// Main Menu
+// ---- User State ----
+const userState = {};
+const supportChatMap = {}; // { adminMsgId: userId }
+
+// ---- Main Menu ----
 function sendMainMenu(userId) {
   const keyboard = {
     reply_markup: {
@@ -142,11 +149,10 @@ function sendMainMenu(userId) {
       ]
     }
   };
-
   bot.sendMessage(userId, 'سلام، به ربات محاسبه‌گر Mobile Legends خوش آمدید ✨', keyboard);
 }
 
-// --- BOT INITIALIZATION ---
+// ---- Bot Initialization ----
 const bot = new TelegramBot(token, { polling: false });
 bot.setWebHook(`${webhookUrl}/bot${token}`);
 
@@ -156,7 +162,7 @@ app.post(`/bot${token}`, (req, res) => {
   res.sendStatus(200);
 });
 
-// /start with referral
+// ---- /start with referral ----
 bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
   const userId = msg.from.id;
   const refId = match[1] ? parseInt(match[1]) : null;
@@ -168,19 +174,18 @@ bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
   }
   if (refId && refId !== userId) {
     const refUser = await getUser(refId);
-    if (refUser) {
-      if ((user.points || 0) === 5 && (user.invites || 0) === 0) {
-        await updatePoints(refId, 5);
-        await update(userRef(refId), { invites: (refUser.invites || 0) + 1 });
-        bot.sendMessage(refId, `🎉 یک نفر با لینک دعوت شما وارد ربات شد و ۵ امتیاز گرفتید!`);
-      }
+    if (refUser && !user.invited_by) {
+      await update(userRef(userId), { invited_by: refId });
+      await updatePoints(refId, 5);
+      await update(userRef(refId), { invites: (refUser.invites || 0) + 1 });
+      bot.sendMessage(refId, `🎉 یک نفر با لینک دعوت شما وارد ربات شد و ۵ امتیاز گرفتید!`);
     }
   }
   userState[userId] = null;
   sendMainMenu(userId);
 });
 
-// /panel for admin
+// ---- /panel for admin ----
 bot.onText(/\/panel/, async (msg) => {
   const userId = msg.from.id;
   if (userId !== adminId) {
@@ -223,15 +228,34 @@ bot.onText(/\/panel/, async (msg) => {
   });
 });
 
-// CALLBACK QUERIES
+// ---- CALLBACK QUERIES ----
 bot.on('callback_query', async (query) => {
   const userId = query.from.id;
   const data = query.data;
 
+  // ---- Anti-Spam ----
+  if (userId !== adminId) {
+    if (isMuted(userId)) {
+      await bot.answerCallbackQuery(query.id, { text: '🚫 به دلیل اسپم کردن دکمه‌ها، تا پانزده دقیقه نمی‌توانید از ربات استفاده کنید.', show_alert: true });
+      return;
+    }
+    if (!buttonSpamMap[userId]) buttonSpamMap[userId] = [];
+    const now = Date.now();
+    buttonSpamMap[userId] = buttonSpamMap[userId].filter(ts => now - ts < 8000);
+    buttonSpamMap[userId].push(now);
+    if (buttonSpamMap[userId].length > 8) {
+      muteMap[userId] = now + 15 * 60 * 1000; // 15 دقیقه میوت
+      buttonSpamMap[userId] = [];
+      await bot.answerCallbackQuery(query.id, { text: '🚫 به دلیل اسپم کردن دکمه‌ها، تا پانزده دقیقه نمی‌توانید از ربات استفاده کنید.', show_alert: true });
+      return;
+    }
+  }
+
   const user = await getUser(userId);
   if (!user) return await bot.answerCallbackQuery(query.id, { text: 'خطا در دریافت اطلاعات کاربر.', show_alert: true });
+  if (user?.banned) return await bot.answerCallbackQuery(query.id, { text: 'شما بن شده‌اید و اجازه استفاده ندارید.', show_alert: true });
 
-  // ---------- آمار ربات ----------
+  // ---- آمار ربات ----
   if (data === 'bot_stats' && userId === adminId) {
     const usersSnap = await get(ref(db, 'users'));
     const users = usersSnap.exists() ? Object.values(usersSnap.val()) : [];
@@ -245,18 +269,18 @@ bot.on('callback_query', async (query) => {
     return bot.sendMessage(userId, `📊 آمار ربات:\n👥 کاربران کل: ${totalUsers}\n⛔ کاربران بن شده: ${bannedUsers}\n🎁 کد هدیه یک‌بارمصرف: ${codes.length}\n🎁 کد هدیه همگانی: ${gCodes.length}`);
   }
 
-  // ---------- ساخت کد هدیه همگانی ----------
+  // ---- ساخت کد هدیه همگانی ----
   if (data === 'add_global_gift_code' && userId === adminId) {
     userState[userId] = { step: 'add_global_gift_code_enter_code' };
     await bot.answerCallbackQuery(query.id);
     return bot.sendMessage(userId, 'کد هدیه همگانی جدید را وارد کنید:');
   }
 
-  // ---------- بخش جدید شانس با سه انتخاب و محدودیت ۲۴ ساعت ----------
+  // ---- شانس (لایسنس بی‌نهایت برای adminId) ----
   if (data === 'chance') {
     const now = Date.now();
     const lastUse = user.last_chance_use || 0;
-    if (now - lastUse < 24*60*60*1000) {
+    if (userId !== adminId && now - lastUse < 24*60*60*1000) {
       const hoursLeft = Math.ceil((24*60*60*1000 - (now - lastUse)) / (60*60*1000));
       await bot.answerCallbackQuery(query.id, { text: `شما تا ${hoursLeft} ساعت دیگر نمی‌توانید دوباره شانس خود را امتحان کنید.`, show_alert: true });
       return;
@@ -285,43 +309,27 @@ bot.on('callback_query', async (query) => {
   }
 
   if (['chance_dice','chance_football','chance_dart'].includes(data)) {
-    // فقط اگر مرحله انتخاب فعال بوده باشد
     if (userState[userId]?.step !== 'chance_select') {
       await bot.answerCallbackQuery(query.id);
       return;
     }
     const now = Date.now();
     const lastUse = user.last_chance_use || 0;
-    if (now - lastUse < 24*60*60*1000) {
+    if (userId !== adminId && now - lastUse < 24*60*60*1000) {
       await bot.answerCallbackQuery(query.id, { text: 'تا ۲۴ ساعت آینده نمی‌تونی دوباره امتحان کنی.', show_alert: true });
       return;
     }
     let emoji, winValue, prize, readable;
     if (data === 'chance_dice') {
-      emoji = '🎲';
-      winValue = 6;
-      prize = 2;
-      readable = 'عدد ۶';
+      emoji = '🎲'; winValue = 6; prize = 2; readable = 'عدد ۶';
     } else if (data === 'chance_football') {
-      emoji = '⚽';
-      winValue = 3; // GOAL
-      prize = 1;
-      readable = 'GOAL';
+      emoji = '⚽'; winValue = 3; prize = 1; readable = 'GOAL';
     } else if (data === 'chance_dart') {
-      emoji = '🎯';
-      winValue = 6; // BULLSEYE
-      prize = 1;
-      readable = 'BULLSEYE';
+      emoji = '🎯'; winValue = 6; prize = 1; readable = 'BULLSEYE';
     }
-    // ارسال انیمیشن ایموجی
     const diceMsg = await bot.sendDice(userId, { emoji });
-    let isWin = false;
-    if (emoji === '🎲') {
-      isWin = diceMsg.dice.value === winValue;
-    } else {
-      isWin = diceMsg.dice.value === winValue;
-    }
-    await updateLastChanceUse(userId, now);
+    let isWin = diceMsg.dice.value === winValue;
+    if (userId !== adminId) await updateLastChanceUse(userId, now);
     if (isWin) {
       await updatePoints(userId, prize);
       await bot.sendMessage(userId, `تبریک! شانست گرفت و (${readable}) اومد و ${prize} امتیاز گرفتی!`);
@@ -332,17 +340,14 @@ bot.on('callback_query', async (query) => {
     return;
   }
 
-  // ---------- ادامه سوئیچ قبلی ----------
+  // ---- سایر دکمه‌ها ----
   switch (data) {
     case 'calculate_rate':
     case 'calculate_wl':
       if (user.points <= 0) {
         return bot.answerCallbackQuery(query.id, { text: 'شما امتیازی برای استفاده ندارید.', show_alert: true });
       }
-      userState[userId] = {
-        type: data === 'calculate_rate' ? 'rate' : 'w/l',
-        step: 'total'
-      };
+      userState[userId] = { type: data === 'calculate_rate' ? 'rate' : 'w/l', step: 'total' };
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, 'تعداد کل بازی‌ها را وارد کن:');
     case 'add_points_all':
@@ -366,7 +371,6 @@ bot.on('callback_query', async (query) => {
     case 'buy':
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, '🎁 برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:\n\n📩 @Beast3694');
-    // --- بخش شانس قدیمی حذف شد ---
     case 'support':
       userState[userId] = { step: 'support' };
       await bot.answerCallbackQuery(query.id);
@@ -439,22 +443,35 @@ bot.on('callback_query', async (query) => {
   }
 });
 
-// MESSAGE HANDLER
+// ---- MESSAGE HANDLER ----
 bot.on('message', async (msg) => {
   const userId = msg.from.id;
   const text = msg.text || '';
-  if (!userState[userId]) return;
+  if (!userState[userId] && userId !== adminId) return;
   const user = await getUser(userId);
+
   if (user?.banned) {
     return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده ندارید.');
   }
+
+  // ---- پاسخ به پشتیبانی توسط ادمین ----
+  if (msg.reply_to_message && userId === adminId) {
+    const replied = msg.reply_to_message;
+    const targetUserId = supportChatMap[replied.message_id];
+    if (targetUserId) {
+      await bot.sendMessage(targetUserId, `پاسخ پشتیبانی:\n${msg.text}`);
+      return bot.sendMessage(adminId, '✅ پیام شما به کاربر ارسال شد.');
+    }
+  }
+
   const state = userState[userId];
+  if (!state) return;
   if (text === '/cancel') {
     userState[userId] = null;
     return bot.sendMessage(userId, 'عملیات لغو شد.', { reply_markup: { remove_keyboard: true } });
   }
 
-  // Panel Admin Steps
+  // ---- Panel Admin Steps ----
   if (userId === adminId) {
     switch (state.step) {
       case 'enter_id':
@@ -510,17 +527,13 @@ bot.on('message', async (msg) => {
         userState[userId] = null;
         return bot.sendMessage(userId, 'متن راهنما با موفقیت بروزرسانی شد.');
       case 'add_points_all_enter': {
-        if (!/^\d+$/.test(text)) {
-          return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید یا /cancel برای لغو.');
-        }
+        if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید یا /cancel برای لغو.');
         const amount = parseInt(text);
         try {
           const snap = await get(ref(db, 'users'));
           const users = snap.exists() ? Object.values(snap.val()) : [];
           const activeUsers = users.filter(u => !u.banned);
-          for (const u of activeUsers) {
-            await updatePoints(u.user_id, amount);
-          }
+          for (const u of activeUsers) await updatePoints(u.user_id, amount);
           await bot.sendMessage(userId, `امتیاز ${amount} به همه کاربران فعال اضافه شد. در حال ارسال پیام...`);
           const batchSize = 20;
           for (let i = 0; i < activeUsers.length; i += batchSize) {
@@ -566,7 +579,7 @@ bot.on('message', async (msg) => {
     }
   }
 
-  // --- User steps for calculations ---
+  // ---- User steps for calculations ----
   if (state.step === 'total') {
     const total = parseInt(text);
     if (isNaN(total) || total <= 0) return bot.sendMessage(userId, 'تعداد کل بازی‌ها را به صورت عدد مثبت وارد کن.');
@@ -601,19 +614,18 @@ bot.on('message', async (msg) => {
     sendMainMenu(userId);
   }
   if (state.step === 'support') {
-    if (msg.message_id) {
+    if (msg.message_id && text.length > 0) {
       try {
-        await bot.forwardMessage(adminId, userId, msg.message_id);
+        const adminMsg = await bot.forwardMessage(adminId, userId, msg.message_id);
+        supportChatMap[adminMsg.message_id] = userId;
         return bot.sendMessage(userId, 'پیام شما ارسال شد. برای خروج /start را بزنید.');
       } catch {
         return bot.sendMessage(userId, 'ارسال پیام با خطا مواجه شد.');
       }
     }
   }
-  // --- Activate gift code (single use or global) ---
   if (state.step === 'enter_gift_code') {
     const code = text.trim();
-    // Try single-use code
     let points = await getGiftCode(code);
     if (points) {
       await deleteGiftCode(code);
@@ -623,7 +635,6 @@ bot.on('message', async (msg) => {
       sendMainMenu(userId);
       return;
     }
-    // Try global code
     const globalGift = await getGlobalGiftCode(code);
     if (globalGift) {
       const usersUsed = globalGift.users_used || {};
