@@ -374,7 +374,7 @@ bot.on('message', async (msg) => {
 
   const state = userState[userId];
 
-  // لغو عملیات
+  // لغو عملیات با /cancel
   if (text === '/cancel') {
     delete userState[userId];
     return bot.sendMessage(userId, 'عملیات لغو شد.', { reply_markup: { remove_keyboard: true } });
@@ -396,12 +396,10 @@ bot.on('message', async (msg) => {
         }
         const points = parseInt(text);
         if (state.type === 'add') {
-          // اینجا کد اضافه کردن امتیاز به کاربر
           await addPointsToUser(state.targetId, points);
           delete userState[userId];
           return bot.sendMessage(userId, `با موفقیت ${points} امتیاز اضافه شد به کاربر ${state.targetId}.`);
         } else if (state.type === 'sub') {
-          // اینجا کد کسر امتیاز از کاربر
           await subtractPointsFromUser(state.targetId, points);
           delete userState[userId];
           return bot.sendMessage(userId, `با موفقیت ${points} امتیاز از کاربر ${state.targetId} کسر شد.`);
@@ -409,7 +407,6 @@ bot.on('message', async (msg) => {
         break;
 
       case 'broadcast':
-        // ارسال پیام همگانی به همه کاربران
         await broadcastMessage(text);
         delete userState[userId];
         return bot.sendMessage(userId, 'پیام همگانی با موفقیت ارسال شد.');
@@ -439,100 +436,52 @@ bot.on('message', async (msg) => {
         return bot.sendMessage(userId, 'مرحله نامشخص است.');
     }
   } else {
-    return bot.sendMessage(userId, 'شما اجازه دسترسی به این بخش را ندارید.');
-  }
-});
+    // مراحل محاسبه ریت یا برد/باخت برای کاربران عادی
+    switch (state.step) {
+      case 'total':
+        const total = parseInt(text);
+        if (isNaN(total)) return bot.sendMessage(userId, 'تعداد کل بازی‌ها را به صورت عدد وارد کن.');
+        state.total = total;
+        state.step = 'rate';
+        return bot.sendMessage(userId, 'ریت فعلی را وارد کن (مثلاً 55):');
 
-      case 'enter_points':
-        if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید.');
-        const pts = parseInt(text);
-        if (state.type === 'add') {
-          updatePoints(state.targetId, pts);
-          bot.sendMessage(userId, `به کاربر ${state.targetId} مقدار ${pts} امتیاز اضافه شد.`);
-        } else if (state.type === 'sub') {
-          updatePoints(state.targetId, -pts);
-          bot.sendMessage(userId, `از کاربر ${state.targetId} مقدار ${pts} امتیاز کسر شد.`);
+      case 'rate':
+        const rate = parseFloat(text);
+        if (isNaN(rate)) return bot.sendMessage(userId, 'درصد ریت را به صورت عدد وارد کن.');
+        
+        if (state.type === 'rate') {
+          state.rate = rate;
+          state.step = 'target';
+          return bot.sendMessage(userId, 'ریت هدف را وارد کن:');
+        } else {
+          const wins = Math.round((state.total * rate) / 100);
+          const losses = state.total - wins;
+
+          await updatePoints(userId, -1);
+          delete userState[userId];
+
+          await bot.sendMessage(userId, `برد: ${wins} | باخت: ${losses}\nامتیاز باقی‌مانده: ${user.points - 1}`);
+          return sendMainMenu(userId);
         }
-        resetUserState(userId);
-        break;
 
-      case 'broadcast':
-        const textToSend = text;
-        resetUserState(userId);
-        bot.sendMessage(userId, 'پیام در حال ارسال به همه کاربران...');
-        db.all(`SELECT user_id FROM users WHERE banned=0`, (err, rows) => {
-          if (rows && rows.length > 0) {
-            rows.forEach(row => {
-              bot.sendMessage(row.user_id, `پیام همگانی:\n\n${textToSend}`).catch(() => { });
-            });
-          }
-        });
-        break;
+      case 'target':
+        const target = parseFloat(text);
+        if (isNaN(target)) return bot.sendMessage(userId, 'ریت هدف را به صورت عدد وارد کن.');
 
-      case 'ban_enter_id':
-        if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک آیدی عددی معتبر وارد کنید.');
-        const banId = parseInt(text);
-        setBanStatus(banId, true);
-        resetUserState(userId);
-        return bot.sendMessage(userId, `کاربر ${banId} بن شد.`);
+        const currentWins = (state.total * state.rate) / 100;
+        const neededWins = Math.ceil(((target / 100 * state.total) - currentWins) / (1 - target / 100));
 
-      case 'unban_enter_id':
-        if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک آیدی عددی معتبر وارد کنید.');
-        const unbanId = parseInt(text);
-        setBanStatus(unbanId, false);
-        resetUserState(userId);
-        return bot.sendMessage(userId, `کاربر ${unbanId} آن‌بن شد.`);
+        await updatePoints(userId, -1);
+        delete userState[userId];
 
-      case 'edit_help':
-        setHelpText(text);
-        resetUserState(userId);
-        return bot.sendMessage(userId, 'متن راهنما با موفقیت بروزرسانی شد.');
+        await bot.sendMessage(userId, `برای رسیدن به ${target}% باید ${neededWins} بازی متوالی ببری.\nامتیاز باقی‌مانده: ${user.points - 1}`);
+        return sendMainMenu(userId);
+
+      default:
+        return bot.sendMessage(userId, 'مرحله نامشخص است.');
     }
   }
-
-  // مراحل محاسبه ریت یا برد/باخت برای کاربران عادی
-if (state.step === 'total') {
-  const total = parseInt(text);
-  if (isNaN(total)) return bot.sendMessage(userId, 'تعداد کل بازی‌ها را به صورت عدد وارد کن.');
-  state.total = total;
-  state.step = 'rate';
-  return bot.sendMessage(userId, 'ریت فعلی را وارد کن (مثلاً 55):');
-}
-
-if (state.step === 'rate') {
-  const rate = parseFloat(text);
-  if (isNaN(rate)) return bot.sendMessage(userId, 'درصد ریت را به صورت عدد وارد کن.');
-  
-  if (state.type === 'rate') {
-    state.rate = rate;
-    state.step = 'target';
-    return bot.sendMessage(userId, 'ریت هدف را وارد کن:');
-  } else {
-    // حالت محاسبه برد/باخت
-    const wins = Math.round((state.total * rate) / 100);
-    const losses = state.total - wins;
-
-    updatePoints(userId, -1); // کم کردن امتیاز
-    resetUserState(userId);
-
-    bot.sendMessage(userId, `برد: ${wins} | باخت: ${losses}\nامتیاز باقی‌مانده: ${user.points - 1}`);
-    sendMainMenu(userId);
-  }
-}
-
-if (state.step === 'target') {
-  const target = parseFloat(text);
-  if (isNaN(target)) return bot.sendMessage(userId, 'ریت هدف را به صورت عدد وارد کن.');
-
-  const currentWins = (state.total * state.rate) / 100;
-  const neededWins = Math.ceil(((target / 100 * state.total) - currentWins) / (1 - target / 100));
-
-  updatePoints(userId, -1);
-  resetUserState(userId);
-
-  bot.sendMessage(userId, `برای رسیدن به ${target}% باید ${neededWins} بازی متوالی ببری.\nامتیاز باقی‌مانده: ${user.points - 1}`);
-  sendMainMenu(userId);
-}
+});
 
   // مرحله پشتیبانی: فوروارد پیام به ادمین
   if (state.step === 'support') {
