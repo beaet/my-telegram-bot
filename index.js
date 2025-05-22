@@ -521,14 +521,84 @@ bot.on('message', async (msg) => {
 }
 
 // بعدش تابع رو صدا بزنی
-someFunction();
-          bot.sendMessage(userId, `به کاربر ${state.targetId} مقدار ${pts} امتیاز اضافه شد.`);
+// ... سایر کدهای شما بالاتر ...
+
+// به جای دو بار تعریف updatePoints، فقط این را نگه دارید:
+function updatePoints(userId, amount) {
+  return new Promise((resolve, reject) => {
+    db.run(`UPDATE users SET points = points + ? WHERE user_id = ?`, [amount, userId], (err) => {
+      if (err) {
+        console.error('خطا در افزایش امتیاز:', err);
+        reject(err);
+      } else {
+        console.log(`امتیاز ${amount} به کاربر ${userId} اضافه شد.`);
+        resolve();
+      }
+    });
+  });
+}
+
+// هندل پیام‌ها (برای مراحل مختلف و عملیات متنی)
+bot.on('message', async (msg) => {
+  const userId = msg.from.id;
+  const text = msg.text || '';
+
+  const state = userState[userId];  // حالت کاربر
+
+  if (!state) return;  // اگر حالت تعریف نشده است رد شو
+
+  const user = await getUser(userId);
+  if (user?.banned) {
+    return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده ندارید.');
+  }
+
+  if (text === '/cancel') {
+    resetUserState(userId);
+    return bot.sendMessage(userId, 'عملیات لغو شد.', { reply_markup: { remove_keyboard: true } });
+  }
+
+  // مراحل مربوط به پنل مدیریت (ادمین)
+  if (userId === adminId) {
+    switch (state.step) {
+      case 'enter_id':
+        if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک آیدی عددی معتبر وارد کنید.');
+        state.targetId = parseInt(text);
+        state.step = 'enter_points';
+        if (state.type === 'add') {
+          return bot.sendMessage(userId, 'تعداد امتیاز برای اضافه کردن را وارد کنید:');
         } else if (state.type === 'sub') {
-          await updatePoints(state.targetId, -pts);
-          bot.sendMessage(userId, `از کاربر ${state.targetId} مقدار ${pts} امتیاز کسر شد.`);
+          return bot.sendMessage(userId, 'تعداد امتیاز برای کسر را وارد کنید:');
+        }
+        break;
+
+      case 'enter_points':
+        if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید.');
+        const pts = parseInt(text);
+
+        if (state.type === 'add') {
+          try {
+            await updatePoints(state.targetId, pts);
+            bot.sendMessage(userId, `به کاربر ${state.targetId} مقدار ${pts} امتیاز اضافه شد.`);
+          } catch (err) {
+            bot.sendMessage(userId, 'خطا در اضافه کردن امتیاز.');
+            console.error(err);
+          }
+        } else if (state.type === 'sub') {
+          try {
+            await updatePoints(state.targetId, -pts);
+            bot.sendMessage(userId, `از کاربر ${state.targetId} مقدار ${pts} امتیاز کسر شد.`);
+          } catch (err) {
+            bot.sendMessage(userId, 'خطا در کسر امتیاز.');
+            console.error(err);
+          }
         }
         resetUserState(userId);
         break;
+
+      // سایر حالت‌ها ...
+    }
+  }
+});
 
       case 'broadcast':
         resetUserState(userId);
@@ -613,7 +683,7 @@ someFunction();
     sendMainMenu(userId);
   }
 
-  // مرحله پشتیبانی: پیام به ادمین
+  // مرحله پشتیبانی: فوروارد پیام به ادمین
   if (state.step === 'support') {
     if (msg.message_id) {
       try {
