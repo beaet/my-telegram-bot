@@ -516,7 +516,12 @@ bot.on('message', async (msg) => {
         if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید.');
         const pts = parseInt(text);
         if (state.type === 'add') {
-          await updatePoints(state.targetId, pts);
+     async function someFunction() {
+  await updatePoints(state.targetId, pts);
+}
+
+// بعدش تابع رو صدا بزنی
+someFunction();
           bot.sendMessage(userId, `به کاربر ${state.targetId} مقدار ${pts} امتیاز اضافه شد.`);
         } else if (state.type === 'sub') {
           await updatePoints(state.targetId, -pts);
