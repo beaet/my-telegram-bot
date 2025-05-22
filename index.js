@@ -285,41 +285,41 @@ bot.on('callback_query', async (query) => {
     return bot.answerCallbackQuery(query.id, { text: 'شما بن شده‌اید.', show_alert: true });
   }
 
-  switch (data) {
-    case 'calculate_rate':
-    case 'calculate_wl':
-      if (user.points <= 0) {
-        return bot.answerCallbackQuery(query.id, { text: 'شما امتیازی برای استفاده ندارید.', show_alert: true });
-      }
-      userState[userId] = {
-        type: data === 'calculate_rate' ? 'rate' : 'w/l',
-        step: 'total'
-      };
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'تعداد کل بازی‌ها را وارد کن:');
+switch (data) {
+  case 'calculate_rate':
+  case 'calculate_wl':
+    if (user.points <= 0) {
+      return bot.answerCallbackQuery(query.id, { text: 'شما امتیازی برای استفاده ندارید.', show_alert: true });
+    }
+    userState[userId] = {
+      type: data === 'calculate_rate' ? 'rate' : 'w/l',
+      step: 'total'
+    };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'تعداد کل بازی‌ها را وارد کن:');
 
-case 'add_points_all':
-  if (userId !== adminId) {
-    await bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
-    return;
-  }
-  userState[userId] = { step: 'add_points_all_enter' };
-  await bot.answerCallbackQuery(query.id);
-  return bot.sendMessage(userId, 'لطفاً مقدار امتیاز برای اضافه کردن به همه کاربران را وارد کنید:');
+  case 'add_points_all':
+    if (userId !== adminId) {
+      await bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
+      return;
+    }
+    userState[userId] = { step: 'add_points_all_enter' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'لطفاً مقدار امتیاز برای اضافه کردن به همه کاربران را وارد کنید:');
 
-    case 'referral':
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, `می‌خوای امتیاز بیشتری بگیری؟ 🎁
+  case 'referral':
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, `می‌خوای امتیاز بیشتری بگیری؟ 🎁
 لینک اختصاصی خودتو برای دوستات بفرست!
 هر کسی که با لینک تو وارد ربات بشه، ۵ امتیاز دائمی می‌گیری ⭐️
 لینک دعوت مخصوص شما⬇️:\nhttps://t.me/mlbbratebot?start=${userId}`);
 
-    case 'profile':
-      await bot.answerCallbackQuery(query.id);
-      const invitesCount = user.invites || 0;
-return bot.sendMessage(userId, `🆔 آیدی عددی: ${userId}\n⭐ امتیاز فعلی: ${user.points}\n📨 تعداد دعوتی‌ها: ${invitesCount}`);
+  case 'profile':
+    await bot.answerCallbackQuery(query.id);
+    const invitesCount = user.invites || 0;
+    return bot.sendMessage(userId, `🆔 آیدی عددی: ${userId}\n⭐ امتیاز فعلی: ${user.points}\n📨 تعداد دعوتی‌ها: ${invitesCount}`);
 
- case 'buy':
+  case 'buy':
     await bot.answerCallbackQuery(query.id);
     return bot.sendMessage(userId, '🎁 برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:\n\n📩 @Beast3694');
 
@@ -351,12 +351,10 @@ return bot.sendMessage(userId, `🆔 آیدی عددی: ${userId}\n⭐ امتی�
       resetUserState(userId);
     });
 
-    return; // به جای break
-
+    return; // به جای break چون async داره
   }
 
   case 'chance': {
-    // اینجا کد تاس و امتیاز رو قرار بده
     const dice = Math.floor(Math.random() * 6) + 1;
     let message = `تاس شما: ${dice}\n`;
 
@@ -380,41 +378,40 @@ return bot.sendMessage(userId, `🆔 آیدی عددی: ${userId}\n⭐ امتی�
     await bot.answerCallbackQuery(query.id);
     return bot.sendMessage(userId, 'شما وارد بخش پشتیبانی شده‌اید!\nپیام شما به من فوروارد خواهد شد 📤\nبرای خروج و بازگشت به منوی اصلی، دستور /start را ارسال کنید ⏪');
 
+  case 'help':
+    await bot.answerCallbackQuery(query.id);
+    const helpText = await getHelpText();
+    return bot.sendMessage(userId, helpText);
+
+  case 'add_points':
+  case 'sub_points':
+    userState[userId] = { step: 'enter_id', type: data === 'add_points' ? 'add' : 'sub' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'آیدی عددی کاربر را وارد کنید:');
+
+  case 'broadcast':
+    userState[userId] = { step: 'broadcast' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'متن پیام همگانی را ارسال کنید یا /cancel برای لغو:');
+
+  case 'ban_user':
+    userState[userId] = { step: 'ban_enter_id' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'آیدی عددی کاربر برای بن کردن را وارد کنید:');
+
+  case 'unban_user':
+    userState[userId] = { step: 'unban_enter_id' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'آیدی عددی کاربر برای آن‌بن کردن را وارد کنید:');
+
+  case 'edit_help':
+    userState[userId] = { step: 'edit_help' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'متن جدید راهنما را ارسال کنید یا /cancel برای لغو:');
+
   default:
     break;
 }
-    case 'help':
-      await bot.answerCallbackQuery(query.id);
-      const helpText = await getHelpText();
-      return bot.sendMessage(userId, helpText);
-
-    case 'add_points':
-    case 'sub_points':
-      userState[userId] = { step: 'enter_id', type: data === 'add_points' ? 'add' : 'sub' };
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'آیدی عددی کاربر را وارد کنید:');
-
-    case 'broadcast':
-      userState[userId] = { step: 'broadcast' };
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'متن پیام همگانی را ارسال کنید یا /cancel برای لغو:');
-
-    case 'ban_user':
-      userState[userId] = { step: 'ban_enter_id' };
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'آیدی عددی کاربر برای بن کردن را وارد کنید:');
-
-    case 'unban_user':
-      userState[userId] = { step: 'unban_enter_id' };
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'آیدی عددی کاربر برای آن‌بن کردن را وارد کنید:');
-
-    case 'edit_help':
-      userState[userId] = { step: 'edit_help' };
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'متن جدید راهنما را ارسال کنید یا /cancel برای لغو:');
-  }
-});
 
 // هندل پیام‌های ورودی برای مراحل مختلف
 bot.on('message', async (msg) => {
