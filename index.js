@@ -296,70 +296,55 @@ bot.on('callback_query', async (query) => {
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, 'تعداد کل بازی‌ها را وارد کن:');
 
-  case 'add_points_all_enter': {
-    if (!/^\d+$/.test(text)) {
-      return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید یا /cancel برای لغو.');
-    }
-    const amount = parseInt(text);
+    case 'add_points_all_enter': {
+  if (!/^\d+$/.test(text)) {
+    return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید یا /cancel برای لغو.');
+  }
+  const amount = parseInt(text);
 
-    try {
-      // تبدیل db.all به Promise تا بتونیم با await کار کنیم
-      const rows = await new Promise((resolve, reject) => {
-        db.all(`SELECT user_id FROM users WHERE banned=0`, (err, rows) => {
-          if (err) reject(err);
-          else resolve(rows);
-        });
+  try {
+    // تبدیل db.all به Promise تا بتونیم با await کار کنیم
+    const rows = await new Promise((resolve, reject) => {
+      db.all(`SELECT user_id FROM users WHERE banned=0`, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
       });
+    });
 
-      // اینجا کد اضافه کردن امتیاز به همه‌ی کاربران
-      for (const row of rows) {
-        await new Promise((resolve, reject) => {
-          db.run(`UPDATE users SET points = points + ? WHERE user_id = ?`, [amount, row.user_id], (err) => {
-            if (err) reject(err);
-            else resolve();
-          });
-        });
-      }
-
-      await bot.sendMessage(userId, `با موفقیت ${amount} امتیاز به همه کاربران اضافه شد.`);
-      userState[userId] = {};  // پاک کردن حالت کاربر
-    } catch (error) {
-      console.error(error);
-      await bot.sendMessage(userId, 'خطا در افزودن امتیاز به همه کاربران رخ داد.');
+    for (const row of rows) {
+      await updatePoints(row.user_id, amount);
     }
-    break;
+
+    await bot.sendMessage(userId, `امتیاز ${amount} به تمام کاربران فعال اضافه شد.`);
+
+    for (const [index, row] of rows.entries()) {
+      setTimeout(() => {
+        bot.sendMessage(row.user_id, `📢 امتیاز ${amount} از طرف پنل مدیریت به حساب شما افزوده شد.`);
+      }, index * 100);
+    }
+
+  } catch (error) {
+    await bot.sendMessage(userId, 'خطا در دریافت کاربران.');
   }
 
-  case 'referral': {
-    await bot.answerCallbackQuery(query.id);
-    return bot.sendMessage(userId, `می‌خوای امتیاز بیشتری بگیری؟ 🎁
+  resetUserState(userId);
+  return;
+}
+    case 'referral':
+      await bot.answerCallbackQuery(query.id);
+      return bot.sendMessage(userId, `می‌خوای امتیاز بیشتری بگیری؟ 🎁
 لینک اختصاصی خودتو برای دوستات بفرست!
 هر کسی که با لینک تو وارد ربات بشه، ۵ امتیاز دائمی می‌گیری ⭐️
 لینک دعوت مخصوص شما⬇️:\nhttps://t.me/mlbbratebot?start=${userId}`);
-  }
 
-  case 'add_points_all': {
-    if (userId !== adminId) {
-      await bot.answerCallbackQuery(query.id, { text: 'شما دسترسی ندارید.', show_alert: true });
-      return;
-    }
-    userState[userId] = { step: 'add_points_all_enter' };
-    await bot.answerCallbackQuery(query.id);
-    return bot.sendMessage(userId, 'مقدار امتیازی که می‌خواهید به همه بدهید را وارد کنید:');
-  }
+    case 'profile':
+      await bot.answerCallbackQuery(query.id);
+      const invitesCount = user.invites || 0;
+      return bot.sendMessage(userId, `🆔 آیدی عددی: ${userId}\n⭐ امتیاز فعلی: ${user.points}\n📨 تعداد دعوتی‌ها: ${invitesCount}`);
 
-  case 'profile': {
-    await bot.answerCallbackQuery(query.id);
-    const invitesCount = user.invites || 0;
-    return bot.sendMessage(userId, `🆔 آیدی عددی: ${userId}\n⭐ امتیاز فعلی: ${user.points}\n📨 تعداد دعوتی‌ها: ${invitesCount}`);
-  }
-
-  case 'buy': {
-    await bot.answerCallbackQuery(query.id);
-    return bot.sendMessage(userId, '🎁 برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:\n\n📩 @Beast3694');
-  }
-
-  // بقیه case ها ...
+    case 'buy':
+      await bot.answerCallbackQuery(query.id);
+      return bot.sendMessage(userId, '🎁 برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:\n\n📩 @Beast3694');
 
     case 'chance': {
       await bot.answerCallbackQuery(query.id);
@@ -443,52 +428,12 @@ bot.on('message', async (msg) => {
   const userId = msg.from.id;
   const text = msg.text || '';
 
-  const state = userState[userId];  // این خط باید اول باشه
-
-  if (!state) return;  // اگر حالت کاربری نیست، رد شو
+  if (!userState[userId]) return;
 
   const user = await getUser(userId);
   if (user?.banned) {
     return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده ندارید.');
   }
-  
-  if (state.step === 'add_points_all_enter') {
-    if (!/^\d+$/.test(text)) {
-      return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید یا /cancel برای لغو.');
-    }
-    const amount = parseInt(text);
-
-    try {
-      const rows = await new Promise((resolve, reject) => {
-        db.all(`SELECT user_id FROM users WHERE banned=0`, (err, rows) => {
-          if (err) reject(err);
-          else resolve(rows);
-        });
-      });
-
-      for (const row of rows) {
-        await updatePoints(row.user_id, amount);
-      }
-
-      await bot.sendMessage(userId, `امتیاز ${amount} به تمام کاربران فعال اضافه شد.`);
-
-      // اطلاع‌رسانی به کاربران
-      for (const [index, row] of rows.entries()) {
-        setTimeout(() => {
-          bot.sendMessage(row.user_id, `📢 امتیاز ${amount} از طرف پنل مدیریت به حساب شما افزوده شد.`);
-        }, index * 100);
-      }
-
-    } catch (error) {
-      await bot.sendMessage(userId, 'خطا در دریافت کاربران.');
-    }
-
-    resetUserState(userId);
-    return;
-  }
-
-  // سایر مراحل پردازش پیام‌ها...
-});
 
   const state = userState[userId];
 
@@ -516,127 +461,52 @@ bot.on('message', async (msg) => {
         if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید.');
         const pts = parseInt(text);
         if (state.type === 'add') {
-     async function someFunction() {
-  await updatePoints(state.targetId, pts);
-}
-
-// بعدش تابع رو صدا بزنی
-// ... سایر کدهای شما بالاتر ...
-
-// به جای دو بار تعریف updatePoints، فقط این را نگه دارید:
-function updatePoints(userId, amount) {
-  return new Promise((resolve, reject) => {
-    db.run(`UPDATE users SET points = points + ? WHERE user_id = ?`, [amount, userId], (err) => {
-      if (err) {
-        console.error('خطا در افزایش امتیاز:', err);
-        reject(err);
-      } else {
-        console.log(`امتیاز ${amount} به کاربر ${userId} اضافه شد.`);
-        resolve();
-      }
-    });
-  });
-}
-
-// هندل پیام‌ها (برای مراحل مختلف و عملیات متنی)
-bot.on('message', async (msg) => {
-  const userId = msg.from.id;
-  const text = msg.text || '';
-
-  const state = userState[userId];  // حالت کاربر
-
-  if (!state) return;  // اگر حالت تعریف نشده است رد شو
-
-  const user = await getUser(userId);
-  if (user?.banned) {
-    return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده ندارید.');
-  }
-
-  if (text === '/cancel') {
-    resetUserState(userId);
-    return bot.sendMessage(userId, 'عملیات لغو شد.', { reply_markup: { remove_keyboard: true } });
-  }
-
-  // مراحل مربوط به پنل مدیریت (ادمین)
-  if (userId === adminId) {
-    switch (state.step) {
-      case 'enter_id':
-        if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک آیدی عددی معتبر وارد کنید.');
-        state.targetId = parseInt(text);
-        state.step = 'enter_points';
-        if (state.type === 'add') {
-          return bot.sendMessage(userId, 'تعداد امتیاز برای اضافه کردن را وارد کنید:');
+          await updatePoints(state.targetId, pts);
+          bot.sendMessage(userId, `به کاربر ${state.targetId} مقدار ${pts} امتیاز اضافه شد.`);
         } else if (state.type === 'sub') {
-          return bot.sendMessage(userId, 'تعداد امتیاز برای کسر را وارد کنید:');
-        }
-        break;
-
-      case 'enter_points':
-        if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید.');
-        const pts = parseInt(text);
-
-        if (state.type === 'add') {
-          try {
-            await updatePoints(state.targetId, pts);
-            bot.sendMessage(userId, `به کاربر ${state.targetId} مقدار ${pts} امتیاز اضافه شد.`);
-          } catch (err) {
-            bot.sendMessage(userId, 'خطا در اضافه کردن امتیاز.');
-            console.error(err);
-          }
-        } else if (state.type === 'sub') {
-          try {
-            await updatePoints(state.targetId, -pts);
-            bot.sendMessage(userId, `از کاربر ${state.targetId} مقدار ${pts} امتیاز کسر شد.`);
-          } catch (err) {
-            bot.sendMessage(userId, 'خطا در کسر امتیاز.');
-            console.error(err);
-          }
+          await updatePoints(state.targetId, -pts);
+          bot.sendMessage(userId, `از کاربر ${state.targetId} مقدار ${pts} امتیاز کسر شد.`);
         }
         resetUserState(userId);
         break;
 
-      // سایر حالت‌ها ...
+      case 'broadcast':
+        resetUserState(userId);
+        bot.sendMessage(userId, 'پیام در حال ارسال به همه کاربران...');
+        try {
+          const rows = await new Promise((res, rej) => {
+            db.all(`SELECT user_id FROM users WHERE banned=0`, (err, rows) => err ? rej(err) : res(rows));
+          });
+          rows.forEach((row, i) => {
+            setTimeout(() => {
+              bot.sendMessage(row.user_id, `پیام همگانی:\n\n${text}`).catch(() => { });
+            }, i * 100);
+          });
+        } catch {
+          bot.sendMessage(userId, 'خطا در ارسال پیام همگانی.');
+        }
+        break;
+
+      case 'ban_enter_id':
+        if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک آیدی عددی معتبر وارد کنید.');
+        const banId = parseInt(text);
+        await setBanStatus(banId, true);
+        resetUserState(userId);
+        return bot.sendMessage(userId, `کاربر ${banId} بن شد.`);
+
+      case 'unban_enter_id':
+        if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک آیدی عددی معتبر وارد کنید.');
+        const unbanId = parseInt(text);
+        await setBanStatus(unbanId, false);
+        resetUserState(userId);
+        return bot.sendMessage(userId, `کاربر ${unbanId} آن‌بن شد.`);
+
+      case 'edit_help':
+        await setHelpText(text);
+        resetUserState(userId);
+        return bot.sendMessage(userId, 'متن راهنما با موفقیت بروزرسانی شد.');
     }
   }
-});
-
-   switch (userState) {
-      case 'broadcast':
-    resetUserState(userId);
-    bot.sendMessage(userId, 'پیام در حال ارسال به همه کاربران...');
-    try {
-      const rows = await new Promise((res, rej) => {
-        db.all(`SELECT user_id FROM users WHERE banned=0`, (err, rows) => err ? rej(err) : res(rows));
-      });
-      rows.forEach((row, i) => {
-        setTimeout(() => {
-          bot.sendMessage(row.user_id, `پیام همگانی:\n\n${text}`).catch(() => { });
-        }, i * 100);
-      });
-    } catch {
-      bot.sendMessage(userId, 'خطا در ارسال پیام همگانی.');
-    }
-    break;
-
-  case 'ban_enter_id':
-    if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک آیدی عددی معتبر وارد کنید.');
-    const banId = parseInt(text);
-    await setBanStatus(banId, true);
-    resetUserState(userId);
-    return bot.sendMessage(userId, `کاربر ${banId} بن شد.`);
-
-  case 'unban_enter_id':
-    if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک آیدی عددی معتبر وارد کنید.');
-    const unbanId = parseInt(text);
-    await setBanStatus(unbanId, false);
-    resetUserState(userId);
-    return bot.sendMessage(userId, `کاربر ${unbanId} آن‌بن شد.`);
-
-  case 'edit_help':
-    await setHelpText(text);
-    resetUserState(userId);
-    return bot.sendMessage(userId, 'متن راهنما با موفقیت بروزرسانی شد.');
-}
 
 
   // مراحل محاسبه ریت یا برد/باخت برای کاربران عادی
