@@ -1,7 +1,7 @@
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
-require('dotenv').config();  // باید در بالای فایل باشه
+require('dotenv').config(); // باید در بالای فایل باشه
 
 const app = express();
 
@@ -9,6 +9,7 @@ const token = process.env.BOT_TOKEN;            // توکن ربات
 const adminId = Number(process.env.ADMIN_ID);   // آیدی ادمین
 const webhookUrl = process.env.WEBHOOK_URL;     // آدرس وبهوک
 const port = process.env.PORT || 10000;         // پورت
+
 // تنظیم وبهوک و ربات
 const bot = new TelegramBot(token, { polling: false });
 bot.setWebHook(`${webhookUrl}/bot${token}`);
@@ -34,41 +35,40 @@ const db = new sqlite3.Database('./botdata.sqlite', (err) => {
     banned INTEGER DEFAULT 0,
     last_chance_use INTEGER DEFAULT 0,
     username TEXT,
-    invites INTEGER DEFAULT 0
+    invites INTEGER DEFAULT 0,
+    points INTEGER DEFAULT 0
   )`, (err) => {
     if (err) {
       console.error('خطا در ایجاد جدول users:', err.message);
       return;
     }
-    
-    // ایجاد جدول settings اگر وجود نداشته باشد
-  db.run(`CREATE TABLE IF NOT EXISTS settings (
-    key TEXT PRIMARY KEY,
-    value TEXT
-  )`, (err) => {
-    if (err) {
-      console.error('خطا در ایجاد جدول settings:', err.message);
-    } else {
-      console.log('جدول settings با موفقیت بررسی/ایجاد شد.');
-    }
-  });
-  
-  // مقدار پیش‌فرض help_text را درج کن اگر وجود ندارد
-db.get(`SELECT * FROM settings WHERE key = 'help_text'`, (err, row) => {
-  if (!row) {
-    db.run(`INSERT INTO settings (key, value) VALUES ('help_text', 'برای استفاده از ربات از دکمه‌های منو استفاده کن.')`);
-  }
-});
 
-    // چک کردن وجود ستون points
+    // ایجاد جدول settings اگر وجود نداشته باشد
+    db.run(`CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    )`, (err) => {
+      if (err) {
+        console.error('خطا در ایجاد جدول settings:', err.message);
+      } else {
+        console.log('جدول settings با موفقیت بررسی/ایجاد شد.');
+      }
+    });
+
+    // مقدار پیش‌فرض help_text را درج کن اگر وجود ندارد
+    db.get(`SELECT * FROM settings WHERE key = 'help_text'`, (err, row) => {
+      if (!row) {
+        db.run(`INSERT INTO settings (key, value) VALUES ('help_text', 'برای استفاده از ربات از دکمه‌های منو استفاده کن.')`);
+      }
+    });
+
+    // چک کردن وجود ستون points (برای سازگاری با نسخه‌های قبلی)
     db.all(`PRAGMA table_info(users)`, (err, columns) => {
       if (err) {
         console.error('خطا در خواندن ساختار جدول users:', err.message);
         return;
       }
-
       const hasPoints = columns.some(col => col.name === 'points');
-
       if (!hasPoints) {
         db.run("ALTER TABLE users ADD COLUMN points INTEGER DEFAULT 0", (err) => {
           if (err) {
@@ -82,89 +82,39 @@ db.get(`SELECT * FROM settings WHERE key = 'help_text'`, (err, row) => {
       }
     });
   });
-
-  // ادامه کد ایجاد جدول settings و غیره
 });
 
 // وضعیت موقت کاربر برای مراحل مختلف
 const userState = {};
 
 // کمک برای ایجاد یا اطمینان از وجود کاربر در دیتابیس
-function ensureUser(user) {
+async function ensureUser(user) {
   if (!user || !user.id) return;
-
-  db.get(`SELECT user_id FROM users WHERE user_id = ?`, [user.id], (err, row) => {
-    if (err) {
-      console.error('خطا در انتخاب کاربر:', err);
-      return;
-    }
-
-    if (!row) {
-      const username = user.username || '';
-      db.run(
-        `INSERT INTO users (user_id, username, points) VALUES (?, ?, 5)`,
-        [user.id, username],
-        (err) => {
-          if (err) {
-            console.error('خطا در درج کاربر جدید:', err);
-          } else {
-            console.log(`کاربر جدید با آیدی ${user.id} اضافه شد.`);
-          }
-        }
-      );
-    }
-  });
-}
-// هندلر پیام‌ها (خصوصاً /start با پارامتر دعوت)
-bot.on('message', (msg) => {
-  const userId = msg.from.id;
-  let refId = null;
-
-  if (msg.text && msg.text.startsWith('/start')) {
-    const parts = msg.text.split(' ');
-    if (parts.length > 1) {
-      refId = parts[1];  // شناسه دعوت‌کننده
-    }
-
-    db.get(`SELECT * FROM users WHERE user_id = ?`, [userId], (err, row) => {
+  return new Promise((resolve, reject) => {
+    db.get(`SELECT user_id FROM users WHERE user_id = ?`, [user.id], (err, row) => {
       if (err) {
-        console.error(err);
-        return;
+        console.error('خطا در انتخاب کاربر:', err);
+        return reject(err);
       }
-
       if (!row) {
-        // کاربر جدید - امتیاز اولیه 5
-        db.run(`INSERT INTO users (user_id, username, points, invites) VALUES (?, ?, 5, 0)`, [userId, msg.from.username || ''], (err) => {
-          if (err) {
-            console.error(err);
-            return;
+        const username = user.username || '';
+        db.run(
+          `INSERT INTO users (user_id, username, points) VALUES (?, ?, 5)`,
+          [user.id, username],
+          (err) => {
+            if (err) {
+              console.error('خطا در درج کاربر جدید:', err);
+              return reject(err);
+            } else {
+              console.log(`کاربر جدید با آیدی ${user.id} اضافه شد.`);
+              resolve();
+            }
           }
-
-          if (refId && refId != userId) {
-            updatePoints(refId, 5);
-
-            db.run(`UPDATE users SET invites = invites + 1 WHERE user_id = ?`, [refId], (err) => {
-              if (err) {
-                console.error(err);
-                return;
-              }
-              // پیام اطلاع‌رسانی به دعوت‌کننده با ایموجی
-              bot.sendMessage(refId, `🚀 کاربر *${msg.from.username || userId}* با لینک دعوت شما وارد شد! ✨ شما ۵ امتیاز جایزه گرفتید!`, {parse_mode: 'Markdown'});
-            });
-          }
-        });
+        );
+      } else {
+        resolve();
       }
     });
-  }
-});
-
-function updatePoints(userId, amount) {
-  db.run(`UPDATE users SET points = points + ? WHERE user_id = ?`, [amount, userId], (err) => {
-    if (err) {
-      console.error('خطا در افزایش امتیاز:', err);
-    } else {
-      console.log(`امتیاز ${amount} به کاربر ${userId} اضافه شد.`);
-    }
   });
 }
 
@@ -180,7 +130,11 @@ function getUser(userId) {
 
 // آپدیت امتیاز کاربر (مثبت یا منفی)
 function updatePoints(userId, amount) {
-  db.run(`UPDATE users SET points = points + ? WHERE user_id = ?`, [amount, userId]);
+  db.run(`UPDATE users SET points = points + ? WHERE user_id = ?`, [amount, userId], (err) => {
+    if (err) {
+      console.error('خطا در افزایش امتیاز:', err);
+    }
+  });
 }
 
 function updateLastChanceUse(userId, timestamp) {
@@ -241,31 +195,41 @@ function sendMainMenu(userId) {
           { text: '📚راهنما', callback_data: 'help' }
         ],
         [
-           { text: '🎁خرید امتیاز', callback_data: 'buy' }
+          { text: '🎁خرید امتیاز', callback_data: 'buy' }
         ],
-        [ // این ردیف دکمه شانس اضافه شده
+        [
           { text: '🍀 شانس', callback_data: 'chance' }
         ]
       ]
     }
   };
-
-
-    bot.sendMessage(userId, 'سلام، به ربات محاسبه‌گر Mobile Legends خوش آمدید ✨', keyboard);
+  bot.sendMessage(userId, 'سلام، به ربات محاسبه‌گر Mobile Legends خوش آمدید ✨', keyboard);
 }
 
 // هندل دستور /start با امکان لینک دعوت
 bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
   const userId = msg.from.id;
   const refId = match[1] ? parseInt(match[1]) : null;
+  await ensureUser(msg.from);
 
-  ensureUser(msg.from);
   const user = await getUser(userId);
   if (user?.banned) {
     return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده از ربات را ندارید.');
   }
-
   resetUserState(userId);
+
+  // Referral logic (only for new users)
+  if (refId && refId != userId) {
+    const refUser = await getUser(refId);
+    if (refUser) {
+      updatePoints(refId, 5);
+      db.run(`UPDATE users SET invites = invites + 1 WHERE user_id = ?`, [refId], (err) => {
+        if (!err) {
+          bot.sendMessage(refId, `🚀 کاربر *${msg.from.username || userId}* با لینک دعوت شما وارد شد! ✨ شما ۵ امتیاز جایزه گرفتید!`, { parse_mode: 'Markdown' });
+        }
+      });
+    }
+  }
 
   sendMainMenu(userId);
 });
@@ -333,44 +297,42 @@ bot.on('callback_query', async (query) => {
     case 'profile':
       await bot.answerCallbackQuery(query.id);
       const invitesCount = user.invites || 0;
-return bot.sendMessage(userId, `🆔 آیدی عددی: ${userId}\n⭐ امتیاز فعلی: ${user.points}\n📨 تعداد دعوتی‌ها: ${invitesCount}`);
+      return bot.sendMessage(userId, `🆔 آیدی عددی: ${userId}\n⭐ امتیاز فعلی: ${user.points}\n📨 تعداد دعوتی‌ها: ${invitesCount}`);
 
     case 'buy':
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, '🎁 برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:\n\n📩 @Beast3694');
 
-case 'chance':
-  {
-    const now = Date.now();
-    const lastUse = await getLastChanceUse(userId);
+    case 'chance': {
+      const now = Date.now();
+      const lastUse = await getLastChanceUse(userId);
 
-    const diff = now - lastUse;
-    if (diff < 24 * 60 * 60 * 1000) {
-      const hoursLeft = Math.ceil((24 * 60 * 60 * 1000 - diff) / (60 * 60 * 1000));
-      await bot.answerCallbackQuery(query.id, {
-        text: `شما فقط هر ۲۴ ساعت یک بار می‌توانید این گزینه را استفاده کنید. لطفا ${hoursLeft} ساعت دیگر تلاش کنید.`,
-        show_alert: true
-      });
-      return;
+      const diff = now - lastUse;
+      if (diff < 24 * 60 * 60 * 1000) {
+        const hoursLeft = Math.ceil((24 * 60 * 60 * 1000 - diff) / (60 * 60 * 1000));
+        await bot.answerCallbackQuery(query.id, {
+          text: `شما فقط هر ۲۴ ساعت یک بار می‌توانید این گزینه را استفاده کنید. لطفا ${hoursLeft} ساعت دیگر تلاش کنید.`,
+          show_alert: true
+        });
+        return;
+      }
+
+      const dice = Math.floor(Math.random() * 6) + 1;
+      let message = `تاس شما: ${dice}\n`;
+
+      if (dice === 6) {
+        updatePoints(userId, 1);
+        message += 'تبریک! 1 امتیاز به شما اضافه شد.';
+      } else {
+        message += 'امتیازی به شما تعلق نگرفت. شانس خود را برای دفعه بعد حفظ کنید.';
+      }
+
+      updateLastChanceUse(userId, now);
+
+      await bot.answerCallbackQuery(query.id);
+      await bot.sendMessage(userId, message);
+      break;
     }
-
-    const dice = Math.floor(Math.random() * 6) + 1;
-    let message = `تاس شما: ${dice}\n`;
-
-    if (dice === 6) {
-      updatePoints(userId, 1);
-      message += 'تبریک! 1 امتیاز به شما اضافه شد.';
-    } else {
-      message += 'امتیازی به شما تعلق نگرفت. شانس خود را برای دفعه بعد حفظ کنید.';
-    }
-
-    updateLastChanceUse(userId, now);
-
-    await bot.answerCallbackQuery(query.id);
-    await bot.sendMessage(userId, message);
-  }
-  break;
-
     case 'support':
       userState[userId] = { step: 'support' };
       await bot.answerCallbackQuery(query.id);
@@ -409,18 +371,22 @@ case 'chance':
   }
 });
 
-// هندل پیام‌های ورودی برای مراحل مختلف
+// هندل پیام‌های ورودی برای مراحل مختلف (یکپارچه و تمیز)
 bot.on('message', async (msg) => {
   const userId = msg.from.id;
   const text = msg.text;
 
-  if (!userState[userId]) return; // اگر در مرحله‌ای نبود، کاری نکن
+  // اطمینان از وجود کاربر
+  await ensureUser(msg.from);
 
   // اگر کاربر بن شده باشد
   const user = await getUser(userId);
   if (user?.banned) {
     return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده ندارید.');
   }
+
+  // اگر در حالتی نبود، خروج
+  if (!userState[userId]) return;
 
   const state = userState[userId];
 
@@ -446,7 +412,6 @@ bot.on('message', async (msg) => {
           return bot.sendMessage(userId, 'تعداد امتیاز برای کسر را وارد کنید:');
         }
         break;
-
       case 'enter_points':
         if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید.');
         const pts = parseInt(text);
@@ -459,7 +424,6 @@ bot.on('message', async (msg) => {
         }
         resetUserState(userId);
         break;
-
       case 'broadcast':
         const textToSend = text;
         resetUserState(userId);
@@ -472,69 +436,68 @@ bot.on('message', async (msg) => {
           }
         });
         break;
-
       case 'ban_enter_id':
         if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک آیدی عددی معتبر وارد کنید.');
         const banId = parseInt(text);
         setBanStatus(banId, true);
         resetUserState(userId);
         return bot.sendMessage(userId, `کاربر ${banId} بن شد.`);
-
       case 'unban_enter_id':
         if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک آیدی عددی معتبر وارد کنید.');
         const unbanId = parseInt(text);
         setBanStatus(unbanId, false);
         resetUserState(userId);
         return bot.sendMessage(userId, `کاربر ${unbanId} آن‌بن شد.`);
-
       case 'edit_help':
         setHelpText(text);
         resetUserState(userId);
         return bot.sendMessage(userId, 'متن راهنما با موفقیت به‌روزرسانی شد.');
+    }
+  }
 
   // مراحل محاسبه ریت یا برد/باخت برای کاربران عادی
-if (state.step === 'total') {
-  const total = parseInt(text);
-  if (isNaN(total)) return bot.sendMessage(userId, 'تعداد کل بازی‌ها را به صورت عدد وارد کن.');
-  state.total = total;
-  state.step = 'rate';
-  return bot.sendMessage(userId, 'ریت فعلی را وارد کن (مثلاً 55):');
-}
+  if (state.step === 'total') {
+    const total = parseInt(text);
+    if (isNaN(total)) return bot.sendMessage(userId, 'تعداد کل بازی‌ها را به صورت عدد وارد کن.');
+    state.total = total;
+    state.step = 'rate';
+    return bot.sendMessage(userId, 'ریت فعلی را وارد کن (مثلاً 55):');
+  }
 
-if (state.step === 'rate') {
-  const rate = parseFloat(text);
-  if (isNaN(rate)) return bot.sendMessage(userId, 'درصد ریت را به صورت عدد وارد کن.');
-  
-  if (state.type === 'rate') {
-    state.rate = rate;
-    state.step = 'target';
-    return bot.sendMessage(userId, 'ریت هدف را وارد کن:');
-  } else {
-    // حالت محاسبه برد/باخت
-    const wins = Math.round((state.total * rate) / 100);
-    const losses = state.total - wins;
+  if (state.step === 'rate') {
+    const rate = parseFloat(text);
+    if (isNaN(rate)) return bot.sendMessage(userId, 'درصد ریت را به صورت عدد وارد کن.');
 
-    updatePoints(userId, -1); // کم کردن امتیاز
+    if (state.type === 'rate') {
+      state.rate = rate;
+      state.step = 'target';
+      return bot.sendMessage(userId, 'ریت هدف را وارد کن:');
+    } else {
+      // حالت محاسبه برد/باخت
+      const wins = Math.round((state.total * rate) / 100);
+      const losses = state.total - wins;
+
+      updatePoints(userId, -1); // کم کردن امتیاز
+      resetUserState(userId);
+
+      bot.sendMessage(userId, `برد: ${wins} | باخت: ${losses}\nامتیاز باقی‌مانده: ${user.points - 1}`);
+      sendMainMenu(userId);
+    }
+  }
+
+  if (state.step === 'target') {
+    const target = parseFloat(text);
+    if (isNaN(target)) return bot.sendMessage(userId, 'ریت هدف را به صورت عدد وارد کن.');
+
+    const currentWins = (state.total * state.rate) / 100;
+    const neededWins = Math.ceil(((target / 100 * state.total) - currentWins) / (1 - target / 100));
+
+    updatePoints(userId, -1);
     resetUserState(userId);
 
-    bot.sendMessage(userId, `برد: ${wins} | باخت: ${losses}\nامتیاز باقی‌مانده: ${user.points - 1}`);
+    bot.sendMessage(userId, `برای رسیدن به ${target}% باید ${neededWins} بازی متوالی ببری.\nامتیاز باقی‌مانده: ${user.points - 1}`);
     sendMainMenu(userId);
   }
-}
-
-if (state.step === 'target') {
-  const target = parseFloat(text);
-  if (isNaN(target)) return bot.sendMessage(userId, 'ریت هدف را به صورت عدد وارد کن.');
-
-  const currentWins = (state.total * state.rate) / 100;
-  const neededWins = Math.ceil(((target / 100 * state.total) - currentWins) / (1 - target / 100));
-
-  updatePoints(userId, -1);
-  resetUserState(userId);
-
-  bot.sendMessage(userId, `برای رسیدن به ${target}% باید ${neededWins} بازی متوالی ببری.\nامتیاز باقی‌مانده: ${user.points - 1}`);
-  sendMainMenu(userId);
-}
 
   // مرحله پشتیبانی: فوروارد پیام به ادمین
   if (state.step === 'support') {
@@ -545,7 +508,7 @@ if (state.step === 'target') {
     }
   }
 });
-  
+
 // شروع سرور
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
