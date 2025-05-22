@@ -5,7 +5,7 @@ require('dotenv').config(); // باید در بالای فایل باشه
 
 const app = express();
 
-const token = process.env.BOT_TOKEN;            // توکن ربات
+const token = process.env.BOT_TOKEN;            // توکن
 const adminId = Number(process.env.ADMIN_ID);   // آیدی ادمین
 const webhookUrl = process.env.WEBHOOK_URL;     // آدرس وبهوک
 const port = process.env.PORT || 10000;         // پورت
