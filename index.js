@@ -326,26 +326,27 @@ if (state.step === 'add_points_all_enter') {
   }
   const amount = parseInt(text);
 
-  db.all(`SELECT user_id FROM users WHERE banned=0`, (err, rows) => {
-    if (err) {
-      bot.sendMessage(userId, 'خطا در دریافت کاربران.');
-      resetUserState(userId);
-      return;
-    }
-
-    rows.forEach(row => {
-      updatePoints(row.user_id, amount);
-    });
-
-    bot.sendMessage(userId, `امتیاز ${amount} به تمام کاربران فعال اضافه شد.`);
-    rows.forEach(row => {
-      bot.sendMessage(row.user_id, `📢 امتیاز ${amount} از طرف پنل مدیریت به حساب شما افزوده شد.`);
-    });
-
+  db.all(`SELECT user_id FROM users WHERE banned=0`, async (err, rows) => {
+  if (err) {
+    bot.sendMessage(userId, 'خطا در دریافت کاربران.');
     resetUserState(userId);
-  });
-  return;
-}
+    return;
+  }
+
+  for (const row of rows) {
+    await updatePoints(row.user_id, amount); // فرض بر اینه که updatePoints یه Promise هست
+  }
+
+  bot.sendMessage(userId, `امتیاز ${amount} به تمام کاربران فعال اضافه شد.`);
+
+  for (const [index, row] of rows.entries()) {
+    setTimeout(() => {
+      bot.sendMessage(row.user_id, `📢 امتیاز ${amount} از طرف پنل مدیریت به حساب شما افزوده شد.`);
+    }, index * 100); // هر پیام با فاصله 100 میلی‌ثانیه ارسال میشه
+  }
+
+  resetUserState(userId);
+});
 
 case 'chance':
   {
