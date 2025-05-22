@@ -133,7 +133,7 @@ function sendMainMenu(userId) {
           { text: '📚راهنما', callback_data: 'help' }
         ],
         [
-           { text: '💰خرید امتیاز', callback_data: 'buy' }
+           { text: '🎁خرید امتیاز', callback_data: 'buy' }
         ],
         [
           { text: '🍀 شانس', callback_data: 'chance' },
@@ -252,6 +252,87 @@ bot.on('callback_query', async (query) => {
     return bot.sendMessage(userId, 'کد هدیه همگانی جدید را وارد کنید:');
   }
 
+  // ---------- بخش جدید شانس با سه انتخاب و محدودیت ۲۴ ساعت ----------
+  if (data === 'chance') {
+    const now = Date.now();
+    const lastUse = user.last_chance_use || 0;
+    if (now - lastUse < 24*60*60*1000) {
+      const hoursLeft = Math.ceil((24*60*60*1000 - (now - lastUse)) / (60*60*1000));
+      await bot.answerCallbackQuery(query.id, { text: `شما تا ${hoursLeft} ساعت دیگر نمی‌توانید دوباره شانس خود را امتحان کنید.`, show_alert: true });
+      return;
+    }
+    userState[userId] = { step: 'chance_select' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId,
+      `🍀 شانست رو انتخاب کن!\n\n
+🎲 اگر تاس بندازی و ۶ بیاد: ۲ امتیاز می‌گیری
+⚽ اگر پنالتی بزنی و گل بشه (GOAL): ۱ امتیاز می‌گیری
+🎯 اگر دارت بزنی و وسط هدف (BULLSEYE) بزنی: ۱ امتیاز می‌گیری
+
+یک گزینه رو انتخاب کن:`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: '🎲 تاس', callback_data: 'chance_dice' },
+              { text: '⚽ پنالتی', callback_data: 'chance_football' },
+              { text: '🎯 دارت', callback_data: 'chance_dart' }
+            ]
+          ]
+        }
+      }
+    );
+  }
+
+  if (['chance_dice','chance_football','chance_dart'].includes(data)) {
+    // فقط اگر مرحله انتخاب فعال بوده باشد
+    if (userState[userId]?.step !== 'chance_select') {
+      await bot.answerCallbackQuery(query.id);
+      return;
+    }
+    const now = Date.now();
+    const lastUse = user.last_chance_use || 0;
+    if (now - lastUse < 24*60*60*1000) {
+      await bot.answerCallbackQuery(query.id, { text: 'تا ۲۴ ساعت آینده نمی‌تونی دوباره امتحان کنی.', show_alert: true });
+      return;
+    }
+    let emoji, winValue, prize, readable;
+    if (data === 'chance_dice') {
+      emoji = '🎲';
+      winValue = 6;
+      prize = 2;
+      readable = 'عدد ۶';
+    } else if (data === 'chance_football') {
+      emoji = '⚽';
+      winValue = 3; // GOAL
+      prize = 1;
+      readable = 'GOAL';
+    } else if (data === 'chance_dart') {
+      emoji = '🎯';
+      winValue = 6; // BULLSEYE
+      prize = 1;
+      readable = 'BULLSEYE';
+    }
+    // ارسال انیمیشن ایموجی
+    const diceMsg = await bot.sendDice(userId, { emoji });
+    let isWin = false;
+    if (emoji === '🎲') {
+      isWin = diceMsg.dice.value === winValue;
+    } else {
+      isWin = diceMsg.dice.value === winValue;
+    }
+    await updateLastChanceUse(userId, now);
+    if (isWin) {
+      await updatePoints(userId, prize);
+      await bot.sendMessage(userId, `تبریک! شانست گرفت و (${readable}) اومد و ${prize} امتیاز گرفتی!`);
+    } else {
+      await bot.sendMessage(userId, `متاسفانه شانست نگرفت 😞 دوباره فردا امتحان کن!`);
+    }
+    userState[userId] = null;
+    return;
+  }
+
+  // ---------- ادامه سوئیچ قبلی ----------
   switch (data) {
     case 'calculate_rate':
     case 'calculate_wl':
@@ -285,21 +366,7 @@ bot.on('callback_query', async (query) => {
     case 'buy':
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, '🎁 برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:\n\n📩 @Beast3694');
-    case 'chance': {
-      await bot.answerCallbackQuery(query.id);
-      const dice = Math.floor(Math.random() * 6) + 1;
-      let message = `تاس شما: ${dice}\n`;
-      const now = Date.now();
-      if (dice === 6) {
-        await updatePoints(userId, 1);
-        message += 'تبریک! 1 امتیاز به شما اضافه شد.';
-      } else {
-        message += 'امتیازی به شما تعلق نگرفت. شانس خود را برای دفعه بعد حفظ کنید.';
-      }
-      await updateLastChanceUse(userId, now);
-      await bot.sendMessage(userId, message);
-      break;
-    }
+    // --- بخش شانس قدیمی حذف شد ---
     case 'support':
       userState[userId] = { step: 'support' };
       await bot.answerCallbackQuery(query.id);
