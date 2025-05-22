@@ -443,7 +443,9 @@ bot.on('message', async (msg) => {
   const userId = msg.from.id;
   const text = msg.text || '';
 
-  if (!userState[userId]) return;
+  const state = userState[userId];  // این خط باید اول باشه
+
+  if (!state) return;  // اگر حالت کاربری نیست، رد شو
 
   const user = await getUser(userId);
   if (user?.banned) {
@@ -451,39 +453,42 @@ bot.on('message', async (msg) => {
   }
   
   if (state.step === 'add_points_all_enter') {
-  if (!/^\d+$/.test(text)) {
-    return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید یا /cancel برای لغو.');
-  }
-  const amount = parseInt(text);
+    if (!/^\d+$/.test(text)) {
+      return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید یا /cancel برای لغو.');
+    }
+    const amount = parseInt(text);
 
-  try {
-    const rows = await new Promise((resolve, reject) => {
-      db.all(`SELECT user_id FROM users WHERE banned=0`, (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
+    try {
+      const rows = await new Promise((resolve, reject) => {
+        db.all(`SELECT user_id FROM users WHERE banned=0`, (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        });
       });
-    });
 
-    for (const row of rows) {
-      await updatePoints(row.user_id, amount);
+      for (const row of rows) {
+        await updatePoints(row.user_id, amount);
+      }
+
+      await bot.sendMessage(userId, `امتیاز ${amount} به تمام کاربران فعال اضافه شد.`);
+
+      // اطلاع‌رسانی به کاربران
+      for (const [index, row] of rows.entries()) {
+        setTimeout(() => {
+          bot.sendMessage(row.user_id, `📢 امتیاز ${amount} از طرف پنل مدیریت به حساب شما افزوده شد.`);
+        }, index * 100);
+      }
+
+    } catch (error) {
+      await bot.sendMessage(userId, 'خطا در دریافت کاربران.');
     }
 
-    await bot.sendMessage(userId, `امتیاز ${amount} به تمام کاربران فعال اضافه شد.`);
-
-    // اطلاع‌رسانی به کاربران
-    for (const [index, row] of rows.entries()) {
-      setTimeout(() => {
-        bot.sendMessage(row.user_id, `📢 امتیاز ${amount} از طرف پنل مدیریت به حساب شما افزوده شد.`);
-      }, index * 100);
-    }
-
-  } catch (error) {
-    await bot.sendMessage(userId, 'خطا در دریافت کاربران.');
+    resetUserState(userId);
+    return;
   }
 
-  resetUserState(userId);
-  return;
-}
+  // سایر مراحل پردازش پیام‌ها...
+});
 
   const state = userState[userId];
 
