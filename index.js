@@ -64,6 +64,16 @@ const db = new sqlite3.Database('./botdata.sqlite', (err) => {
     });
   });
 
+  // ایجاد جدول gift_codes اگر وجود نداشته باشد
+  db.run(`CREATE TABLE IF NOT EXISTS gift_codes (
+    code TEXT PRIMARY KEY,
+    points INTEGER NOT NULL
+  )`, (err) => {
+    if (err) {
+      console.error('خطا در ایجاد جدول gift_codes:', err.message);
+    }
+  });
+
   // ادامه کد ایجاد جدول settings و غیره
 });
 
@@ -152,6 +162,46 @@ function resetUserState(userId) {
   delete userState[userId];
 }
 
+// اضافه یا بروزرسانی کد هدیه
+function upsertGiftCode(code, points) {
+  return new Promise((resolve, reject) => {
+    db.run(`INSERT OR REPLACE INTO gift_codes (code, points) VALUES (?, ?)`, [code, points], (err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+}
+
+// حذف کد هدیه
+function deleteGiftCode(code) {
+  return new Promise((resolve, reject) => {
+    db.run(`DELETE FROM gift_codes WHERE code = ?`, [code], (err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+}
+
+// دریافت مقدار امتیاز کد هدیه
+function getGiftCode(code) {
+  return new Promise((resolve, reject) => {
+    db.get(`SELECT points FROM gift_codes WHERE code = ?`, [code], (err, row) => {
+      if (err) reject(err);
+      else resolve(row ? row.points : null);
+    });
+  });
+}
+
+// لیست کدها
+function listGiftCodes() {
+  return new Promise((resolve, reject) => {
+    db.all(`SELECT code, points FROM gift_codes`, (err, rows) => {
+      if (err) reject(err);
+      else resolve(rows);
+    });
+  });
+}
+
 // ارسال منوی اصلی با دکمه‌ها
 function sendMainMenu(userId) {
   const keyboard = {
@@ -175,7 +225,8 @@ function sendMainMenu(userId) {
            { text: '🎁خرید امتیاز', callback_data: 'buy' }
         ],
         [
-          { text: '🍀 شانس', callback_data: 'chance' }
+          { text: '🍀 شانس', callback_data: 'chance' },
+          { text: '🎁 کد هدیه', callback_data: 'gift_code' }
         ]
       ]
     }
@@ -227,6 +278,13 @@ bot.onText(/\/panel/, async (msg) => {
         [
           { text: '🎯 دادن امتیاز به همه', callback_data: 'add_points_all' },
           { text: '↩️ بازگشت', callback_data: 'panel_back' }
+        ],
+        [
+          { text: '➕ افزودن کد هدیه', callback_data: 'add_gift_code' },
+          { text: '🗑 حذف کد هدیه', callback_data: 'delete_gift_code' }
+        ],
+        [
+          { text: '📜 لیست همه کدها', callback_data: 'list_gift_codes' }
         ]
       ]
     }
@@ -350,6 +408,33 @@ bot.on('callback_query', async (query) => {
       userState[userId] = { step: 'edit_help' };
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, 'متن جدید راهنما را ارسال کنید یا /cancel برای لغو:');
+
+    // GIFT CODE SYSTEM
+    case 'gift_code':
+      userState[userId] = { step: 'enter_gift_code' };
+      await bot.answerCallbackQuery(query.id);
+      return bot.sendMessage(userId, 'کد هدیه خود را وارد کنید:');
+
+    // ADMIN GIFT CODE PANEL
+    case 'add_gift_code':
+      if (userId !== adminId) return bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
+      userState[userId] = { step: 'add_gift_code_enter_code' };
+      await bot.answerCallbackQuery(query.id);
+      return bot.sendMessage(userId, 'کد هدیه جدید را وارد کنید:');
+
+    case 'delete_gift_code':
+      if (userId !== adminId) return bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
+      userState[userId] = { step: 'delete_gift_code_enter_code' };
+      await bot.answerCallbackQuery(query.id);
+      return bot.sendMessage(userId, 'کد هدیه برای حذف را وارد کنید:');
+
+    case 'list_gift_codes':
+      if (userId !== adminId) return bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
+      const codes = await listGiftCodes();
+      if (!codes.length) return bot.sendMessage(userId, 'هیچ کد فعالی وجود ندارد.');
+      let msgList = 'کدهای فعال:\n' + codes.map(c => `کد: ${c.code} - امتیاز: ${c.points}`).join('\n');
+      await bot.answerCallbackQuery(query.id);
+      return bot.sendMessage(userId, msgList);
 
     default:
       await bot.answerCallbackQuery(query.id);
@@ -488,6 +573,24 @@ bot.on('message', async (msg) => {
         resetUserState(userId);
         return;
       }
+
+      // افزودن کد هدیه
+      case 'add_gift_code_enter_code':
+        state.code = text.trim();
+        state.step = 'add_gift_code_enter_points';
+        return bot.sendMessage(userId, 'مقدار امتیاز برای این کد را وارد کنید:');
+      case 'add_gift_code_enter_points':
+        if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید.');
+        const points = parseInt(text);
+        await upsertGiftCode(state.code, points);
+        resetUserState(userId);
+        return bot.sendMessage(userId, `کد با موفقیت اضافه شد: ${state.code} (${points} امتیاز)`);
+      // حذف کد هدیه
+      case 'delete_gift_code_enter_code':
+        const code = text.trim();
+        await deleteGiftCode(code);
+        resetUserState(userId);
+        return bot.sendMessage(userId, `کد ${code} حذف شد (در صورت وجود).`);
     }
   }
 
@@ -545,6 +648,26 @@ bot.on('message', async (msg) => {
         return bot.sendMessage(userId, 'ارسال پیام با خطا مواجه شد.');
       }
     }
+  }
+
+  // فعال کردن کد هدیه سمت کاربر
+  if (state.step === 'enter_gift_code') {
+    const code = text.trim();
+    const points = await getGiftCode(code);
+
+    if (!points) {
+      resetUserState(userId);
+      return bot.sendMessage(userId, 'کد نامعتبر است یا منقضی شده است.');
+    }
+
+    // برای جلوگیری از استفاده مجدد، کد را حذف می‌کنیم
+    await deleteGiftCode(code);
+    await updatePoints(userId, points);
+    resetUserState(userId);
+
+    bot.sendMessage(userId, `تبریک! کد با موفقیت فعال شد و ${points} امتیاز به حساب شما افزوده شد.`);
+    sendMainMenu(userId);
+    return;
   }
 });
 
