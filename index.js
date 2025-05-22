@@ -1,208 +1,119 @@
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
-require('dotenv').config();  // باید در بالای فایل باشه
+const { initializeApp } = require('firebase/app');
+const { getDatabase, ref, set, get, update, remove } = require('firebase/database');
+require('dotenv').config();
 
 const app = express();
 
-const token = process.env.BOT_TOKEN;            // توکن ربات
-const adminId = Number(process.env.ADMIN_ID);   // آیدی ادمین
-const webhookUrl = process.env.WEBHOOK_URL;     // آدرس وبهوک
-const port = process.env.PORT || 10000;         // پورت
-// تنظیم وبهوک و ربات
-const bot = new TelegramBot(token, { polling: false });
-bot.setWebHook(`${webhookUrl}/bot${token}`);
+const token = process.env.BOT_TOKEN;
+const adminId = Number(process.env.ADMIN_ID);
+const webhookUrl = process.env.WEBHOOK_URL;
+const port = process.env.PORT || 10000;
 
-app.use(express.json());
+// ---- Firebase Config ----
+const firebaseConfig = {
+  databaseURL: "https://newproject30-3a109-default-rtdb.firebaseio.com/",
+};
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getDatabase(firebaseApp);
 
-// دریافت آپدیت‌ها از تلگرام از طریق وبهوک
-app.post(`/bot${token}`, (req, res) => {
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
-});
+// ---- Helper Functions for Firebase ----
+const userRef = userId => ref(db, `users/${userId}`);
+const giftCodeRef = code => ref(db, `gift_codes/${code}`);
+const globalGiftCodeRef = code => ref(db, `global_gift_codes/${code}`);
+const settingsRef = key => ref(db, `settings/${key}`);
 
-// باز کردن دیتابیس و ایجاد جدول‌ها
-const db = new sqlite3.Database('./botdata.sqlite', (err) => {
-  if (err) {
-    console.error('خطا در باز کردن دیتابیس:', err.message);
-    return;
-  }
-
-  // ایجاد جدول users اگر وجود نداشته باشد
-  db.run(`CREATE TABLE IF NOT EXISTS users (
-    user_id INTEGER PRIMARY KEY,
-    banned INTEGER DEFAULT 0,
-    last_chance_use INTEGER DEFAULT 0,
-    username TEXT,
-    invites INTEGER DEFAULT 0
-  )`, (err) => {
-    if (err) {
-      console.error('خطا در ایجاد جدول users:', err.message);
-      return;
-    }
-
-    // چک کردن وجود ستون points
-    db.all(`PRAGMA table_info(users)`, (err, columns) => {
-      if (err) {
-        console.error('خطا در خواندن ساختار جدول users:', err.message);
-        return;
-      }
-
-      const hasPoints = columns.some(col => col.name === 'points');
-
-      if (!hasPoints) {
-        db.run("ALTER TABLE users ADD COLUMN points INTEGER DEFAULT 0", (err) => {
-          if (err) {
-            console.error("خطا در افزودن ستون points:", err.message);
-          } else {
-            console.log("ستون points با موفقیت اضافه شد");
-          }
-        });
-      } else {
-        console.log("ستون points قبلاً وجود دارد");
-      }
+// Ensure user exists in Firebase (if not, create with default data)
+async function ensureUser(user) {
+  const snap = await get(userRef(user.id));
+  if (!snap.exists()) {
+    await set(userRef(user.id), {
+      user_id: user.id,
+      banned: 0,
+      last_chance_use: 0,
+      username: user.username || '',
+      invites: 0,
+      points: 5
     });
-  });
+  }
+}
 
-  // ایجاد جدول gift_codes اگر وجود نداشته باشد
-  db.run(`CREATE TABLE IF NOT EXISTS gift_codes (
-    code TEXT PRIMARY KEY,
-    points INTEGER NOT NULL
-  )`, (err) => {
-    if (err) {
-      console.error('خطا در ایجاد جدول gift_codes:', err.message);
-    }
-  });
+async function getUser(userId) {
+  const snap = await get(userRef(userId));
+  return snap.exists() ? snap.val() : null;
+}
+async function updatePoints(userId, amount) {
+  const user = await getUser(userId);
+  if (user) {
+    await update(userRef(userId), { points: (user.points || 0) + amount });
+  }
+}
+async function updateLastChanceUse(userId, timestamp) {
+  await update(userRef(userId), { last_chance_use: timestamp });
+}
+async function setBanStatus(userId, status) {
+  await update(userRef(userId), { banned: status ? 1 : 0 });
+}
+async function getHelpText() {
+  const snap = await get(settingsRef('help_text'));
+  return snap.exists() ? snap.val() : 'متن راهنما موجود نیست.';
+}
+async function setHelpText(newText) {
+  await set(settingsRef('help_text'), newText);
+}
+async function upsertGiftCode(code, points) {
+  await set(giftCodeRef(code), points);
+}
+async function deleteGiftCode(code) {
+  await remove(giftCodeRef(code));
+}
+async function getGiftCode(code) {
+  const snap = await get(giftCodeRef(code));
+  return snap.exists() ? snap.val() : null;
+}
+async function upsertGlobalGiftCode(code, points) {
+  await set(globalGiftCodeRef(code), { points, users_used: {} });
+}
+async function getGlobalGiftCode(code) {
+  const snap = await get(globalGiftCodeRef(code));
+  return snap.exists() ? snap.val() : null;
+}
+async function addUserToGlobalGiftCode(code, userId) {
+  const gift = await getGlobalGiftCode(code);
+  if (!gift) return false;
+  let users_used = gift.users_used || {};
+  users_used[userId] = true;
+  await update(globalGiftCodeRef(code), { users_used });
+  return true;
+}
+async function deleteGlobalGiftCode(code) {
+  await remove(globalGiftCodeRef(code));
+}
+async function listGiftCodesCombined() {
+  // Single-use codes
+  const codesSnap = await get(ref(db, 'gift_codes'));
+  const codes = codesSnap.exists() ? Object.keys(codesSnap.val()).map(code => ({
+    type: 'یکبارمصرف',
+    code,
+    points: codesSnap.val()[code]
+  })) : [];
+  // Global codes
+  const globalSnap = await get(ref(db, 'global_gift_codes'));
+  const gCodes = globalSnap.exists()
+    ? Object.keys(globalSnap.val()).map(code => ({
+        type: 'همگانی',
+        code,
+        points: globalSnap.val()[code].points
+      }))
+    : [];
+  return codes.concat(gCodes);
+}
 
-  // ادامه کد ایجاد جدول settings و غیره
-});
-
-// وضعیت موقت کاربر برای مراحل مختلف
+// User state (in-memory, not persistent)
 const userState = {};
 
-// کمک برای ایجاد یا اطمینان از وجود کاربر در دیتابیس
-function ensureUser(user) {
-  db.get(`SELECT user_id FROM users WHERE user_id = ?`, [user.id], (err, row) => {
-    if (err) {
-      console.error('خطا در انتخاب کاربر:', err);
-      return;
-    }
-    if (!row) {
-      db.run(`INSERT INTO users (user_id, username, points) VALUES (?, ?, 5)`, [user.id, user.username || ''], (err) => {
-        if (err) console.error('خطا در درج کاربر جدید:', err);
-      });
-    }
-  });
-}
-
-// گرفتن اطلاعات کاربر از دیتابیس
-function getUser(userId) {
-  return new Promise((resolve, reject) => {
-    db.get(`SELECT * FROM users WHERE user_id = ?`, [userId], (err, row) => {
-      if (err) reject(err);
-      else resolve(row);
-    });
-  });
-}
-
-// آپدیت امتیاز کاربر (مثبت یا منفی)
-function updatePoints(userId, amount) {
-  return new Promise((resolve, reject) => {
-    db.run(`UPDATE users SET points = points + ? WHERE user_id = ?`, [amount, userId], (err) => {
-      if (err) {
-        console.error('خطا در افزایش امتیاز:', err);
-        reject(err);
-      } else {
-        resolve();
-      }
-    });
-  });
-}
-
-function updateLastChanceUse(userId, timestamp) {
-  db.run(`UPDATE users SET last_chance_use = ? WHERE user_id = ?`, [timestamp, userId]);
-}
-
-function getLastChanceUse(userId) {
-  return new Promise((resolve, reject) => {
-    db.get(`SELECT last_chance_use FROM users WHERE user_id = ?`, [userId], (err, row) => {
-      if (err) reject(err);
-      else resolve(row ? row.last_chance_use : 0);
-    });
-  });
-}
-
-// تغییر وضعیت بن کاربر
-function setBanStatus(userId, status) {
-  return new Promise((resolve, reject) => {
-    db.run(`UPDATE users SET banned = ? WHERE user_id = ?`, [status ? 1 : 0, userId], (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
-}
-
-// گرفتن متن راهنما
-function getHelpText() {
-  return new Promise((resolve, reject) => {
-    db.get(`SELECT value FROM settings WHERE key = 'help_text'`, (err, row) => {
-      if (err) reject(err);
-      else resolve(row ? row.value : 'متن راهنما موجود نیست.');
-    });
-  });
-}
-
-// ذخیره متن جدید راهنما
-function setHelpText(newText) {
-  db.run(`INSERT OR REPLACE INTO settings (key, value) VALUES ('help_text', ?)`, [newText]);
-}
-
-// پاک کردن وضعیت موقت کاربر
-function resetUserState(userId) {
-  delete userState[userId];
-}
-
-// اضافه یا بروزرسانی کد هدیه
-function upsertGiftCode(code, points) {
-  return new Promise((resolve, reject) => {
-    db.run(`INSERT OR REPLACE INTO gift_codes (code, points) VALUES (?, ?)`, [code, points], (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
-}
-
-// حذف کد هدیه
-function deleteGiftCode(code) {
-  return new Promise((resolve, reject) => {
-    db.run(`DELETE FROM gift_codes WHERE code = ?`, [code], (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
-}
-
-// دریافت مقدار امتیاز کد هدیه
-function getGiftCode(code) {
-  return new Promise((resolve, reject) => {
-    db.get(`SELECT points FROM gift_codes WHERE code = ?`, [code], (err, row) => {
-      if (err) reject(err);
-      else resolve(row ? row.points : null);
-    });
-  });
-}
-
-// لیست کدها
-function listGiftCodes() {
-  return new Promise((resolve, reject) => {
-    db.all(`SELECT code, points FROM gift_codes`, (err, rows) => {
-      if (err) reject(err);
-      else resolve(rows);
-    });
-  });
-}
-
-// ارسال منوی اصلی با دکمه‌ها
+// Main Menu
 function sendMainMenu(userId) {
   const keyboard = {
     reply_markup: {
@@ -235,29 +146,46 @@ function sendMainMenu(userId) {
   bot.sendMessage(userId, 'سلام، به ربات محاسبه‌گر Mobile Legends خوش آمدید ✨', keyboard);
 }
 
-// هندل دستور /start با امکان لینک دعوت
+// --- BOT INITIALIZATION ---
+const bot = new TelegramBot(token, { polling: false });
+bot.setWebHook(`${webhookUrl}/bot${token}`);
+
+app.use(express.json());
+app.post(`/bot${token}`, (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
+});
+
+// /start with referral
 bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
   const userId = msg.from.id;
   const refId = match[1] ? parseInt(match[1]) : null;
 
-  ensureUser(msg.from);
+  await ensureUser(msg.from);
   const user = await getUser(userId);
   if (user?.banned) {
     return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده از ربات را ندارید.');
   }
-
-  resetUserState(userId);
-
+  if (refId && refId !== userId) {
+    const refUser = await getUser(refId);
+    if (refUser) {
+      if ((user.points || 0) === 5 && (user.invites || 0) === 0) {
+        await updatePoints(refId, 5);
+        await update(userRef(refId), { invites: (refUser.invites || 0) + 1 });
+        bot.sendMessage(refId, `🎉 یک نفر با لینک دعوت شما وارد ربات شد و ۵ امتیاز گرفتید!`);
+      }
+    }
+  }
+  userState[userId] = null;
   sendMainMenu(userId);
 });
 
-// هندل دستور /panel فقط برای ادمین
+// /panel for admin
 bot.onText(/\/panel/, async (msg) => {
   const userId = msg.from.id;
   if (userId !== adminId) {
     return bot.sendMessage(userId, 'شما دسترسی به پنل مدیریت ندارید.');
   }
-
   bot.sendMessage(userId, 'پنل مدیریت:', {
     reply_markup: {
       inline_keyboard: [
@@ -284,20 +212,45 @@ bot.onText(/\/panel/, async (msg) => {
           { text: '🗑 حذف کد هدیه', callback_data: 'delete_gift_code' }
         ],
         [
-          { text: '📜 لیست همه کدها', callback_data: 'list_gift_codes' }
+          { text: '🎁 ساخت کد هدیه همگانی', callback_data: 'add_global_gift_code' }
+        ],
+        [
+          { text: '📜 لیست همه کدها', callback_data: 'list_gift_codes' },
+          { text: '📊 آمار ربات', callback_data: 'bot_stats' }
         ]
       ]
     }
   });
 });
 
-// هندل callback query ها
+// CALLBACK QUERIES
 bot.on('callback_query', async (query) => {
   const userId = query.from.id;
   const data = query.data;
 
   const user = await getUser(userId);
   if (!user) return await bot.answerCallbackQuery(query.id, { text: 'خطا در دریافت اطلاعات کاربر.', show_alert: true });
+
+  // ---------- آمار ربات ----------
+  if (data === 'bot_stats' && userId === adminId) {
+    const usersSnap = await get(ref(db, 'users'));
+    const users = usersSnap.exists() ? Object.values(usersSnap.val()) : [];
+    const totalUsers = users.length;
+    const bannedUsers = users.filter(u => u.banned).length;
+    const codesSnap = await get(ref(db, 'gift_codes'));
+    const codes = codesSnap.exists() ? Object.keys(codesSnap.val()) : [];
+    const globalSnap = await get(ref(db, 'global_gift_codes'));
+    const gCodes = globalSnap.exists() ? Object.keys(globalSnap.val()) : [];
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, `📊 آمار ربات:\n👥 کاربران کل: ${totalUsers}\n⛔ کاربران بن شده: ${bannedUsers}\n🎁 کد هدیه یک‌بارمصرف: ${codes.length}\n🎁 کد هدیه همگانی: ${gCodes.length}`);
+  }
+
+  // ---------- ساخت کد هدیه همگانی ----------
+  if (data === 'add_global_gift_code' && userId === adminId) {
+    userState[userId] = { step: 'add_global_gift_code_enter_code' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'کد هدیه همگانی جدید را وارد کنید:');
+  }
 
   switch (data) {
     case 'calculate_rate':
@@ -311,8 +264,6 @@ bot.on('callback_query', async (query) => {
       };
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, 'تعداد کل بازی‌ها را وارد کن:');
-
-    // Start: Improved "add points to all"
     case 'add_points_all':
       if (userId !== adminId) {
         await bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
@@ -321,58 +272,47 @@ bot.on('callback_query', async (query) => {
       userState[userId] = { step: 'add_points_all_enter' };
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, 'چه مقدار امتیاز به همه اضافه شود؟ لطفا عدد وارد کنید:');
-    // End: Improved "add points to all"
-
     case 'referral':
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, `می‌خوای امتیاز بیشتری بگیری؟ 🎁
 لینک اختصاصی خودتو برای دوستات بفرست!
 هر کسی که با لینک تو وارد ربات بشه، ۵ امتیاز دائمی می‌گیری ⭐️
 لینک دعوت مخصوص شما⬇️:\nhttps://t.me/mlbbratebot?start=${userId}`);
-
     case 'profile':
       await bot.answerCallbackQuery(query.id);
       const invitesCount = user.invites || 0;
       return bot.sendMessage(userId, `🆔 آیدی عددی: ${userId}\n⭐ امتیاز فعلی: ${user.points}\n📨 تعداد دعوتی‌ها: ${invitesCount}`);
-
     case 'buy':
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, '🎁 برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:\n\n📩 @Beast3694');
-
     case 'chance': {
       await bot.answerCallbackQuery(query.id);
       const dice = Math.floor(Math.random() * 6) + 1;
       let message = `تاس شما: ${dice}\n`;
       const now = Date.now();
-
       if (dice === 6) {
         await updatePoints(userId, 1);
         message += 'تبریک! 1 امتیاز به شما اضافه شد.';
       } else {
         message += 'امتیازی به شما تعلق نگرفت. شانس خود را برای دفعه بعد حفظ کنید.';
       }
-
-      updateLastChanceUse(userId, now);
+      await updateLastChanceUse(userId, now);
       await bot.sendMessage(userId, message);
       break;
     }
-
     case 'support':
       userState[userId] = { step: 'support' };
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, 'شما وارد بخش پشتیبانی شده‌اید!\nپیام شما به من فوروارد خواهد شد 📤\nبرای خروج و بازگشت به منوی اصلی، دستور /start را ارسال کنید ⏪');
-
     case 'help':
       await bot.answerCallbackQuery(query.id);
       const helpText = await getHelpText();
       return bot.sendMessage(userId, helpText);
-
     case 'add_points':
     case 'sub_points':
       userState[userId] = { step: 'enter_id', type: data === 'add_points' ? 'add' : 'sub' };
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, 'آیدی عددی کاربر را وارد کنید:');
-
     case 'broadcast':
       if (userId !== adminId) {
         await bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
@@ -381,7 +321,6 @@ bot.on('callback_query', async (query) => {
       userState[userId] = { step: 'broadcast' };
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, 'متن پیام همگانی را ارسال کنید یا /cancel برای لغو:');
-
     case 'ban_user':
       if (userId !== adminId) {
         await bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
@@ -390,7 +329,6 @@ bot.on('callback_query', async (query) => {
       userState[userId] = { step: 'ban_enter_id' };
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, 'آیدی عددی کاربر برای بن کردن را وارد کنید:');
-
     case 'unban_user':
       if (userId !== adminId) {
         await bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
@@ -399,7 +337,6 @@ bot.on('callback_query', async (query) => {
       userState[userId] = { step: 'unban_enter_id' };
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, 'آیدی عددی کاربر برای آن‌بن کردن را وارد کنید:');
-
     case 'edit_help':
       if (userId !== adminId) {
         await bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
@@ -408,74 +345,56 @@ bot.on('callback_query', async (query) => {
       userState[userId] = { step: 'edit_help' };
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, 'متن جدید راهنما را ارسال کنید یا /cancel برای لغو:');
-
-    // GIFT CODE SYSTEM
     case 'gift_code':
       userState[userId] = { step: 'enter_gift_code' };
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, 'کد هدیه خود را وارد کنید:');
-
-    // ADMIN GIFT CODE PANEL
     case 'add_gift_code':
       if (userId !== adminId) return bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
       userState[userId] = { step: 'add_gift_code_enter_code' };
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, 'کد هدیه جدید را وارد کنید:');
-
     case 'delete_gift_code':
       if (userId !== adminId) return bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
       userState[userId] = { step: 'delete_gift_code_enter_code' };
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, 'کد هدیه برای حذف را وارد کنید:');
-
     case 'list_gift_codes':
       if (userId !== adminId) return bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
-      const codes = await listGiftCodes();
-      if (!codes.length) return bot.sendMessage(userId, 'هیچ کد فعالی وجود ندارد.');
-      let msgList = 'کدهای فعال:\n' + codes.map(c => `کد: ${c.code} - امتیاز: ${c.points}`).join('\n');
+      const codes = await listGiftCodesCombined();
+      if (!codes.length) return bot.sendMessage(userId, 'هیچ کدی وجود ندارد.');
+      let msgList = 'لیست همه کدها:\n' + codes.map(c => `کد: ${c.code} (${c.type}) - امتیاز: ${c.points}`).join('\n');
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, msgList);
-
     default:
       await bot.answerCallbackQuery(query.id);
       break;
   }
 });
 
-// هندل پیام‌ها (برای مراحل مختلف و عملیات متنی)
+// MESSAGE HANDLER
 bot.on('message', async (msg) => {
   const userId = msg.from.id;
   const text = msg.text || '';
-
   if (!userState[userId]) return;
-
   const user = await getUser(userId);
   if (user?.banned) {
     return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده ندارید.');
   }
-
   const state = userState[userId];
-
   if (text === '/cancel') {
-    resetUserState(userId);
+    userState[userId] = null;
     return bot.sendMessage(userId, 'عملیات لغو شد.', { reply_markup: { remove_keyboard: true } });
   }
 
-  // مراحل مربوط به پنل مدیریت (ادمین)
+  // Panel Admin Steps
   if (userId === adminId) {
     switch (state.step) {
       case 'enter_id':
         if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک آیدی عددی معتبر وارد کنید.');
         state.targetId = parseInt(text);
-        if (state.type === 'add') {
-          state.step = 'enter_points';
-          return bot.sendMessage(userId, 'تعداد امتیاز برای اضافه کردن را وارد کنید:');
-        } else if (state.type === 'sub') {
-          state.step = 'enter_points';
-          return bot.sendMessage(userId, 'تعداد امتیاز برای کسر را وارد کنید:');
-        }
-        break;
-
+        state.step = 'enter_points';
+        return bot.sendMessage(userId, 'تعداد امتیاز برای اضافه/کسر کردن را وارد کنید:');
       case 'enter_points':
         if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید.');
         const pts = parseInt(text);
@@ -486,21 +405,20 @@ bot.on('message', async (msg) => {
           await updatePoints(state.targetId, -pts);
           bot.sendMessage(userId, `از کاربر ${state.targetId} مقدار ${pts} امتیاز کسر شد.`);
         }
-        resetUserState(userId);
+        userState[userId] = null;
         break;
-
       case 'broadcast':
-        resetUserState(userId);
+        userState[userId] = null;
         bot.sendMessage(userId, 'پیام در حال ارسال به همه کاربران...');
         try {
-          const rows = await new Promise((res, rej) => {
-            db.all(`SELECT user_id FROM users WHERE banned=0`, (err, rows) => err ? rej(err) : res(rows));
-          });
+          const snap = await get(ref(db, 'users'));
+          const users = snap.exists() ? Object.values(snap.val()) : [];
+          const activeUsers = users.filter(u => !u.banned);
           const batchSize = 20;
-          for (let i = 0; i < rows.length; i += batchSize) {
-            const batch = rows.slice(i, i + batchSize);
-            await Promise.all(batch.map(row =>
-              bot.sendMessage(row.user_id, `پیام همگانی:\n\n${text}`).catch(() => { })
+          for (let i = 0; i < activeUsers.length; i += batchSize) {
+            const batch = activeUsers.slice(i, i + batchSize);
+            await Promise.all(batch.map(u =>
+              bot.sendMessage(u.user_id, `پیام همگانی:\n\n${text}`).catch(() => { })
             ));
             await new Promise(res => setTimeout(res, 1000));
           }
@@ -508,73 +426,50 @@ bot.on('message', async (msg) => {
           bot.sendMessage(userId, 'خطا در ارسال پیام همگانی.');
         }
         break;
-
       case 'ban_enter_id':
         if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک آیدی عددی معتبر وارد کنید.');
         const banId = parseInt(text);
         await setBanStatus(banId, true);
-        resetUserState(userId);
+        userState[userId] = null;
         return bot.sendMessage(userId, `کاربر ${banId} بن شد.`);
-
       case 'unban_enter_id':
         if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک آیدی عددی معتبر وارد کنید.');
         const unbanId = parseInt(text);
         await setBanStatus(unbanId, false);
-        resetUserState(userId);
+        userState[userId] = null;
         return bot.sendMessage(userId, `کاربر ${unbanId} آن‌بن شد.`);
-
       case 'edit_help':
         await setHelpText(text);
-        resetUserState(userId);
+        userState[userId] = null;
         return bot.sendMessage(userId, 'متن راهنما با موفقیت بروزرسانی شد.');
-
-      // Improved "add points to all" logic
       case 'add_points_all_enter': {
         if (!/^\d+$/.test(text)) {
           return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید یا /cancel برای لغو.');
         }
         const amount = parseInt(text);
-
         try {
-          // 1. Update all users in a single query
-          await new Promise((resolve, reject) => {
-            db.run(`UPDATE users SET points = points + ? WHERE banned=0`, [amount], err => {
-              if (err) reject(err);
-              else resolve();
-            });
-          });
-
-          // 2. Get user IDs to message
-          const rows = await new Promise((resolve, reject) => {
-            db.all(`SELECT user_id FROM users WHERE banned=0`, (err, rows) => {
-              if (err) reject(err);
-              else resolve(rows);
-            });
-          });
-
-          await bot.sendMessage(userId, `امتیاز ${amount} به همه کاربران فعال اضافه شد. در حال ارسال پیام...`);
-
-          // 3. Batch notifications (e.g., 20 users per second)
-          const batchSize = 20;
-          for (let i = 0; i < rows.length; i += batchSize) {
-            const batch = rows.slice(i, i + batchSize);
-            await Promise.all(batch.map(row =>
-              bot.sendMessage(row.user_id, `📢 امتیاز ${amount} از طرف پنل مدیریت به حساب شما افزوده شد.`).catch(() => {})
-            ));
-            await new Promise(res => setTimeout(res, 1000)); // Wait 1 second between batches
+          const snap = await get(ref(db, 'users'));
+          const users = snap.exists() ? Object.values(snap.val()) : [];
+          const activeUsers = users.filter(u => !u.banned);
+          for (const u of activeUsers) {
+            await updatePoints(u.user_id, amount);
           }
-
+          await bot.sendMessage(userId, `امتیاز ${amount} به همه کاربران فعال اضافه شد. در حال ارسال پیام...`);
+          const batchSize = 20;
+          for (let i = 0; i < activeUsers.length; i += batchSize) {
+            const batch = activeUsers.slice(i, i + batchSize);
+            await Promise.all(batch.map(u =>
+              bot.sendMessage(u.user_id, `📢 امتیاز ${amount} از طرف پنل مدیریت به حساب شما افزوده شد.`).catch(() => {})
+            ));
+            await new Promise(res => setTimeout(res, 1000));
+          }
           await bot.sendMessage(userId, `پیام به همه کاربران ارسال شد.`);
-
         } catch (err) {
           await bot.sendMessage(userId, 'خطا در انجام عملیات.');
         }
-
-        resetUserState(userId);
+        userState[userId] = null;
         return;
       }
-
-      // افزودن کد هدیه
       case 'add_gift_code_enter_code':
         state.code = text.trim();
         state.step = 'add_gift_code_enter_points';
@@ -583,18 +478,28 @@ bot.on('message', async (msg) => {
         if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید.');
         const points = parseInt(text);
         await upsertGiftCode(state.code, points);
-        resetUserState(userId);
+        userState[userId] = null;
         return bot.sendMessage(userId, `کد با موفقیت اضافه شد: ${state.code} (${points} امتیاز)`);
-      // حذف کد هدیه
+      case 'add_global_gift_code_enter_code':
+        state.code = text.trim();
+        state.step = 'add_global_gift_code_enter_points';
+        return bot.sendMessage(userId, 'مقدار امتیاز برای این کد همگانی را وارد کنید:');
+      case 'add_global_gift_code_enter_points':
+        if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید.');
+        const gpoints = parseInt(text);
+        await upsertGlobalGiftCode(state.code, gpoints);
+        userState[userId] = null;
+        return bot.sendMessage(userId, `کد همگانی با موفقیت اضافه شد: ${state.code} (${gpoints} امتیاز)`);
       case 'delete_gift_code_enter_code':
         const code = text.trim();
         await deleteGiftCode(code);
-        resetUserState(userId);
-        return bot.sendMessage(userId, `کد ${code} حذف شد (در صورت وجود).`);
+        await deleteGlobalGiftCode(code);
+        userState[userId] = null;
+        return bot.sendMessage(userId, `کد ${code} (در صورت وجود) حذف شد.`);
     }
   }
 
-  // مراحل محاسبه ریت یا برد/باخت برای کاربران عادی
+  // --- User steps for calculations ---
   if (state.step === 'total') {
     const total = parseInt(text);
     if (isNaN(total) || total <= 0) return bot.sendMessage(userId, 'تعداد کل بازی‌ها را به صورت عدد مثبت وارد کن.');
@@ -602,43 +507,32 @@ bot.on('message', async (msg) => {
     state.step = 'rate';
     return bot.sendMessage(userId, 'ریت فعلی را وارد کن (مثلاً 55):');
   }
-
   if (state.step === 'rate') {
     const rate = parseFloat(text);
     if (isNaN(rate) || rate < 0 || rate > 100) return bot.sendMessage(userId, 'درصد ریت را به صورت عدد بین 0 تا 100 وارد کن.');
-
     if (state.type === 'rate') {
       state.rate = rate;
       state.step = 'target';
       return bot.sendMessage(userId, 'ریت هدف را وارد کن:');
     } else {
-      // حالت محاسبه برد/باخت
       const wins = Math.round((state.total * rate) / 100);
       const losses = state.total - wins;
-
-      await updatePoints(userId, -1); // کم کردن امتیاز
-      resetUserState(userId);
-
+      await updatePoints(userId, -1);
+      userState[userId] = null;
       bot.sendMessage(userId, `برد: ${wins} | باخت: ${losses}\nامتیاز باقی‌مانده: ${user.points - 1}`);
       sendMainMenu(userId);
     }
   }
-
   if (state.step === 'target') {
     const target = parseFloat(text);
     if (isNaN(target) || target < 0 || target > 100) return bot.sendMessage(userId, 'ریت هدف را به صورت عدد بین 0 تا 100 وارد کن.');
-
     const currentWins = (state.total * state.rate) / 100;
     const neededWins = Math.ceil(((target / 100 * state.total) - currentWins) / (1 - target / 100));
-
     await updatePoints(userId, -1);
-    resetUserState(userId);
-
+    userState[userId] = null;
     bot.sendMessage(userId, `برای رسیدن به ${target}% باید ${neededWins} بازی متوالی ببری.\nامتیاز باقی‌مانده: ${user.points - 1}`);
     sendMainMenu(userId);
   }
-
-  // مرحله پشتیبانی: فوروارد پیام به ادمین
   if (state.step === 'support') {
     if (msg.message_id) {
       try {
@@ -649,25 +543,36 @@ bot.on('message', async (msg) => {
       }
     }
   }
-
-  // فعال کردن کد هدیه سمت کاربر
+  // --- Activate gift code (single use or global) ---
   if (state.step === 'enter_gift_code') {
     const code = text.trim();
-    const points = await getGiftCode(code);
-
-    if (!points) {
-      resetUserState(userId);
-      return bot.sendMessage(userId, 'کد نامعتبر است یا منقضی شده است.');
+    // Try single-use code
+    let points = await getGiftCode(code);
+    if (points) {
+      await deleteGiftCode(code);
+      await updatePoints(userId, points);
+      userState[userId] = null;
+      bot.sendMessage(userId, `تبریک! کد با موفقیت فعال شد و ${points} امتیاز به حساب شما افزوده شد.`);
+      sendMainMenu(userId);
+      return;
     }
-
-    // برای جلوگیری از استفاده مجدد، کد را حذف می‌کنیم
-    await deleteGiftCode(code);
-    await updatePoints(userId, points);
-    resetUserState(userId);
-
-    bot.sendMessage(userId, `تبریک! کد با موفقیت فعال شد و ${points} امتیاز به حساب شما افزوده شد.`);
-    sendMainMenu(userId);
-    return;
+    // Try global code
+    const globalGift = await getGlobalGiftCode(code);
+    if (globalGift) {
+      const usersUsed = globalGift.users_used || {};
+      if (usersUsed[userId]) {
+        userState[userId] = null;
+        return bot.sendMessage(userId, 'شما قبلاً از این کد همگانی استفاده کرده‌اید.');
+      }
+      await addUserToGlobalGiftCode(code, userId);
+      await updatePoints(userId, globalGift.points);
+      userState[userId] = null;
+      bot.sendMessage(userId, `کد همگانی فعال شد و ${globalGift.points} امتیاز به حساب شما اضافه شد.`);
+      sendMainMenu(userId);
+      return;
+    }
+    userState[userId] = null;
+    return bot.sendMessage(userId, 'کد نامعتبر است یا منقضی شده است.');
   }
 });
 
