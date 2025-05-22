@@ -1,22 +1,18 @@
 {
   "name": "telegram-rate-bot",
   "version": "1.0.0",
-  "description": "Telegram bot for rating with referral system and admin panel",
+  "description": "A Telegram bot with rate calculation and admin panel",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "node-telegram-bot-api": "^0.61.0",
-    "sqlite3": "^5.1.6",
-    "dotenv": "^16.3.1",
-    "mongodb": "^6.7.0"
+    "mongoose": "^7.3.1",
+    "telegraf": "^4.12.2"
   },
   "engines": {
-    "node": "20.x"
+    "node": ">=18"
   },
-  "keywords": [],
-  "author": "",
+  "author": "YourName",
   "license": "MIT"
 }
