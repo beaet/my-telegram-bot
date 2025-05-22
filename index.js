@@ -85,6 +85,57 @@ function ensureUser(user) {
   });
 }
 
+// هندلر پیام‌ها (خصوصاً /start با پارامتر دعوت)
+bot.on('message', (msg) => {
+  const userId = msg.from.id;
+  let refId = null;
+
+  if (msg.text && msg.text.startsWith('/start')) {
+    const parts = msg.text.split(' ');
+    if (parts.length > 1) {
+      refId = parts[1];  // شناسه دعوت‌کننده
+    }
+
+    db.get(`SELECT * FROM users WHERE user_id = ?`, [userId], (err, row) => {
+      if (err) {
+        console.error(err);
+        return;
+      }
+      if (!row) {
+        db.run(`INSERT INTO users (user_id, username, points, invites) VALUES (?, ?, 0, 0)`, [userId, msg.from.username || ''], (err) => {
+          if (err) {
+            console.error(err);
+            return;
+          }
+
+          if (refId && refId != userId) {
+            updatePoints(refId, 5);
+
+            db.run(`UPDATE users SET invites = invites + 1 WHERE user_id = ?`, [refId], (err) => {
+              if (err) {
+                console.error(err);
+                return;
+              }
+              // ارسال پیام به دعوت‌کننده
+              bot.sendMessage(refId, `کاربر ${msg.from.username || userId} با لینک دعوت شما وارد شد و 5 امتیاز گرفتید.`);
+            });
+          }
+        });
+      }
+    });
+  }
+});
+
+function updatePoints(userId, amount) {
+  db.run(`UPDATE users SET points = points + ? WHERE user_id = ?`, [amount, userId], (err) => {
+    if (err) {
+      console.error('خطا در افزایش امتیاز:', err);
+    } else {
+      console.log(`امتیاز ${amount} به کاربر ${userId} اضافه شد.`);
+    }
+  });
+}
+
 // گرفتن اطلاعات کاربر از دیتابیس
 function getUser(userId) {
   return new Promise((resolve, reject) => {
@@ -183,31 +234,6 @@ bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
   }
 
   resetUserState(userId);
-
-  // مدیریت دعوت
-if (refId && refId !== userId) {
-  // اول چک کن ببین کاربر دعوت‌شده تو دیتابیس هست یا نه
-  db.get(`SELECT user_id FROM users WHERE user_id = ?`, [userId], (err, row) => {
-    if (err) {
-      console.error('خطا در چک کردن کاربر:', err);
-      return;
-    }
-    if (!row) {
-      // اگر کاربر جدید بود، ثبتش کن
-      db.run(`INSERT INTO users (user_id, username, points, invites) VALUES (?, ?, 5, 0)`, [userId, msg.from.username || ''], (err) => {
-        if (err) {
-          console.error('خطا در درج کاربر جدید:', err);
-          return;
-        }
-        // به دعوت‌کننده ۵ امتیاز اضافه کن
-        updatePoints(refId, 5);
-
-        // افزایش تعداد دعوتی‌ها برای دعوت‌کننده
-        db.run(`UPDATE users SET invites = invites + 1 WHERE user_id = ?`, [refId]);
-      });
-    }
-  });
-}
 
   sendMainMenu(userId);
 });
