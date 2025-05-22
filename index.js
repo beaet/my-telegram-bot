@@ -1,14 +1,14 @@
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
+require('dotenv').config();  // باید در بالای فایل باشه
 
 const app = express();
 
-const token = '8129314550:AAFQTvL8VVg-4QtQD8QLY03LCWiSP1uaCak';  // توکن ربات
-const adminId = 381183017;  // آیدی ادمین
-const webhookUrl = 'https://my-telegram-bot-albl.onrender.com';  // آدرس وبهوک شما
-const port = process.env.PORT || 10000;
-
+const token = process.env.BOT_TOKEN;            // توکن ربات
+const adminId = Number(process.env.ADMIN_ID);   // آیدی ادمین
+const webhookUrl = process.env.WEBHOOK_URL;     // آدرس وبهوک
+const port = process.env.PORT || 10000;         // پورت
 // تنظیم وبهوک و ربات
 const bot = new TelegramBot(token, { polling: false });
 bot.setWebHook(`${webhookUrl}/bot${token}`);
@@ -81,6 +81,57 @@ function ensureUser(user) {
       db.run(`INSERT INTO users (user_id, username, points) VALUES (?, ?, 5)`, [user.id, user.username || ''], (err) => {
         if (err) console.error('خطا در درج کاربر جدید:', err);
       });
+    }
+  });
+}
+
+// هندلر پیام‌ها (خصوصاً /start با پارامتر دعوت)
+bot.on('message', (msg) => {
+  const userId = msg.from.id;
+  let refId = null;
+
+  if (msg.text && msg.text.startsWith('/start')) {
+    const parts = msg.text.split(' ');
+    if (parts.length > 1) {
+      refId = parts[1];  // شناسه دعوت‌کننده
+    }
+
+    // ثبت یا اطمینان از وجود کاربر با امتیاز اولیه ۵
+    db.run(
+      `INSERT OR IGNORE INTO users (user_id, username, points, invites) VALUES (?, ?, 5, 0)`,
+      [userId, msg.from.username || ''],
+      (err) => {
+        if (err) {
+          console.error('خطا در درج کاربر جدید:', err);
+          return;
+        }
+
+        // اگر لینک دعوت بود و دعوت‌کننده متفاوت بود
+        if (refId && refId != userId) {
+          updatePoints(refId, 5);
+          db.run(`UPDATE users SET invites = invites + 1 WHERE user_id = ?`, [refId], (err) => {
+            if (err) {
+              console.error('خطا در افزایش تعداد دعوت‌ها:', err);
+              return;
+            }
+            bot.sendMessage(
+              refId,
+              `🚀 کاربر *${msg.from.username || userId}* با لینک دعوت شما وارد شد! ✨ شما ۵ امتیاز جایزه گرفتید!`,
+              { parse_mode: 'Markdown' }
+            );
+          });
+        }
+      }
+    );
+  }
+});
+
+function updatePoints(userId, amount) {
+  db.run(`UPDATE users SET points = points + ? WHERE user_id = ?`, [amount, userId], (err) => {
+    if (err) {
+      console.error('خطا در افزایش امتیاز:', err);
+    } else {
+      console.log(`امتیاز ${amount} به کاربر ${userId} اضافه شد.`);
     }
   });
 }
@@ -184,22 +235,6 @@ bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
 
   resetUserState(userId);
 
-  // مدیریت دعوت
-if (refId && refId !== userId) {
-  db.get(`SELECT invites FROM users WHERE user_id = ?`, [userId], (err, row) => {
-    if (!row) {
-      // کاربر جدیدی که دعوت شده
-      db.run(`INSERT INTO users (user_id, username, points, invites) VALUES (?, ?, 5, 0)`, [userId, msg.from.username || '']);
-      
-      // به دعوت‌کننده امتیاز اضافه کن
-      updatePoints(refId, 5);
-
-      // افزایش تعداد دعوتی‌ها برای دعوت‌کننده
-      db.run(`UPDATE users SET invites = invites + 1 WHERE user_id = ?`, [refId]);
-    }
-  });
-}
-
   sendMainMenu(userId);
 });
 
@@ -226,6 +261,10 @@ bot.onText(/\/panel/, async (msg) => {
         ],
         [
           { text: '🌐تغییر متن راهنما', callback_data: 'edit_help' }
+        ],
+        [
+          { text: '🎯 دادن امتیاز به همه', callback_data: 'add_points_all' },
+          { text: '↩️ بازگشت', callback_data: 'panel_back' }
         ]
       ]
     }
@@ -236,14 +275,6 @@ bot.onText(/\/panel/, async (msg) => {
 bot.on('callback_query', async (query) => {
   const userId = query.from.id;
   const data = query.data;
-  switch (data) {
-  case 'add_points_all':
-    userState[userId] = { step: 'add_points_all_enter' };
-    await bot.answerCallbackQuery(query.id);
-    return bot.sendMessage(userId, 'لطفا مقدار امتیازی که می‌خواهید به همه کاربران اضافه شود را وارد کنید یا /cancel برای لغو:');
-
-  // سایر case ها مثل panel_back و ...
-}
   const user = await getUser(userId);
   if (!user) return bot.answerCallbackQuery(query.id);
 
@@ -279,6 +310,34 @@ return bot.sendMessage(userId, `🆔 آیدی عددی: ${userId}\n⭐ امتی�
     case 'buy':
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, '🎁 برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:\n\n📩 @Beast3694');
+
+case 'add_points_all_enter':
+  if (!/^\d+$/.test(text)) {
+    return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید یا /cancel برای لغو.');
+  }
+  const amount = parseInt(text);
+
+  // گرفتن همه کاربران که بن نیستند
+  db.all(`SELECT user_id FROM users WHERE banned=0`, (err, rows) => {
+    if (err) {
+      bot.sendMessage(userId, 'خطا در دریافت کاربران.');
+      resetUserState(userId);
+      return;
+    }
+
+    rows.forEach(row => {
+      updatePoints(row.user_id, amount);
+    });
+
+    bot.sendMessage(userId, `امتیاز ${amount} به تمام کاربران فعال اضافه شد.`);
+    // ارسال اطلاعیه به همه کاربران
+    rows.forEach(row => {
+      bot.sendMessage(row.user_id, `📢 امتیاز ${amount} از طرف پنل مدیریت به حساب شما افزوده شد.`);
+    });
+
+    resetUserState(userId);
+  });
+  break;
 
 case 'chance':
   {
