@@ -96,35 +96,33 @@ bot.on('message', (msg) => {
       refId = parts[1];  // شناسه دعوت‌کننده
     }
 
-    db.get(`SELECT * FROM users WHERE user_id = ?`, [userId], (err, row) => {
-      if (err) {
-        console.error(err);
-        return;
+    // ثبت یا اطمینان از وجود کاربر با امتیاز اولیه ۵
+    db.run(
+      `INSERT OR IGNORE INTO users (user_id, username, points, invites) VALUES (?, ?, 5, 0)`,
+      [userId, msg.from.username || ''],
+      (err) => {
+        if (err) {
+          console.error('خطا در درج کاربر جدید:', err);
+          return;
+        }
+
+        // اگر لینک دعوت بود و دعوت‌کننده متفاوت بود
+        if (refId && refId != userId) {
+          updatePoints(refId, 5);
+          db.run(`UPDATE users SET invites = invites + 1 WHERE user_id = ?`, [refId], (err) => {
+            if (err) {
+              console.error('خطا در افزایش تعداد دعوت‌ها:', err);
+              return;
+            }
+            bot.sendMessage(
+              refId,
+              `🚀 کاربر *${msg.from.username || userId}* با لینک دعوت شما وارد شد! ✨ شما ۵ امتیاز جایزه گرفتید!`,
+              { parse_mode: 'Markdown' }
+            );
+          });
+        }
       }
-
-      if (!row) {
-        // کاربر جدید - امتیاز اولیه 5
-        db.run(`INSERT INTO users (user_id, username, points, invites) VALUES (?, ?, 5, 0)`, [userId, msg.from.username || ''], (err) => {
-          if (err) {
-            console.error(err);
-            return;
-          }
-
-          if (refId && refId != userId) {
-            updatePoints(refId, 5);
-
-            db.run(`UPDATE users SET invites = invites + 1 WHERE user_id = ?`, [refId], (err) => {
-              if (err) {
-                console.error(err);
-                return;
-              }
-              // پیام اطلاع‌رسانی به دعوت‌کننده با ایموجی
-              bot.sendMessage(refId, `🚀 کاربر *${msg.from.username || userId}* با لینک دعوت شما وارد شد! ✨ شما ۵ امتیاز جایزه گرفتید!`, {parse_mode: 'Markdown'});
-            });
-          }
-        });
-      }
-    });
+    );
   }
 });
 
