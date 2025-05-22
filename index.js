@@ -40,6 +40,25 @@ const db = new sqlite3.Database('./botdata.sqlite', (err) => {
       console.error('خطا در ایجاد جدول users:', err.message);
       return;
     }
+    
+    // ایجاد جدول settings اگر وجود نداشته باشد
+  db.run(`CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+  )`, (err) => {
+    if (err) {
+      console.error('خطا در ایجاد جدول settings:', err.message);
+    } else {
+      console.log('جدول settings با موفقیت بررسی/ایجاد شد.');
+    }
+  });
+  
+  // مقدار پیش‌فرض help_text را درج کن اگر وجود ندارد
+db.get(`SELECT * FROM settings WHERE key = 'help_text'`, (err, row) => {
+  if (!row) {
+    db.run(`INSERT INTO settings (key, value) VALUES ('help_text', 'برای استفاده از ربات از دکمه‌های منو استفاده کن.')`);
+  }
+});
 
     // چک کردن وجود ستون points
     db.all(`PRAGMA table_info(users)`, (err, columns) => {
