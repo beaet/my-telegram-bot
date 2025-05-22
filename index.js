@@ -319,11 +319,11 @@ case 'add_points_all':
       const invitesCount = user.invites || 0;
 return bot.sendMessage(userId, `🆔 آیدی عددی: ${userId}\n⭐ امتیاز فعلی: ${user.points}\n📨 تعداد دعوتی‌ها: ${invitesCount}`);
 
-    case 'buy':
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, '🎁 برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:\n\n📩 @Beast3694');
+ case 'buy':
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, '🎁 برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:\n\n📩 @Beast3694');
 
-case 'add_points_all_enter': {
+  case 'add_points_all_enter': {
     if (!/^\d+$/.test(text)) {
       return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید یا /cancel برای لغو.');
     }
@@ -351,42 +351,38 @@ case 'add_points_all_enter': {
       resetUserState(userId);
     });
 
-    return;  // به جای break، return بگذارید تا از switch خارج شود
+    return; // به جای break
+
   }
 
   case 'chance': {
-    // کدهای مربوط به 'chance'
-    // اگر async است، حتما از async/await درست استفاده کنید و در آخر break بگذارید
-    break;
-  }
-
-  default:
-    // سایر caseها
-    break;
-}
-
+    // اینجا کد تاس و امتیاز رو قرار بده
     const dice = Math.floor(Math.random() * 6) + 1;
     let message = `تاس شما: ${dice}\n`;
 
     if (dice === 6) {
-      updatePoints(userId, 1);
+      await updatePoints(userId, 1);
       message += 'تبریک! 1 امتیاز به شما اضافه شد.';
     } else {
       message += 'امتیازی به شما تعلق نگرفت. شانس خود را برای دفعه بعد حفظ کنید.';
     }
 
-    updateLastChanceUse(userId, now);
+    await updateLastChanceUse(userId, now);
 
     await bot.answerCallbackQuery(query.id);
     await bot.sendMessage(userId, message);
+
+    break;
   }
-  break;
 
-    case 'support':
-      userState[userId] = { step: 'support' };
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'شما وارد بخش پشتیبانی شده‌اید!\nپیام شما به من فوروارد خواهد شد 📤\nبرای خروج و بازگشت به منوی اصلی، دستور /start را ارسال کنید ⏪');
+  case 'support':
+    userState[userId] = { step: 'support' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'شما وارد بخش پشتیبانی شده‌اید!\nپیام شما به من فوروارد خواهد شد 📤\nبرای خروج و بازگشت به منوی اصلی، دستور /start را ارسال کنید ⏪');
 
+  default:
+    break;
+}
     case 'help':
       await bot.answerCallbackQuery(query.id);
       const helpText = await getHelpText();
