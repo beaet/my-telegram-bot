@@ -351,10 +351,11 @@ case 'add_points_all_enter':
     resetUserState(userId);
   });
 
-  break;  // <---- اضافه کردن break اینجا
+  // اینجا دیگه نباید break بزارید چون db.all asyncه و این خط خارج از switch حساب میشه
+  return;  // یا return چیزی که تو async تابع اصلی هست
 
 case 'chance':
-  // ادامه کد
+  // بقیه کد اینجا
 
     const dice = Math.floor(Math.random() * 6) + 1;
     let message = `تاس شما: ${dice}\n`;
