@@ -296,45 +296,70 @@ bot.on('callback_query', async (query) => {
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, 'تعداد کل بازی‌ها را وارد کن:');
 
-    case 'add_points_all_enter': {
-  if (!/^\d+$/.test(text)) {
-    return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید یا /cancel برای لغو.');
-  }
-  const amount = parseInt(text);
+  case 'add_points_all_enter': {
+    if (!/^\d+$/.test(text)) {
+      return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید یا /cancel برای لغو.');
+    }
+    const amount = parseInt(text);
 
-  try {
-    // تبدیل db.all به Promise تا بتونیم با await کار کنیم
-    const rows = await new Promise((resolve, reject) => {
-      db.all(`SELECT user_id FROM users WHERE banned=0`, (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
+    try {
+      // تبدیل db.all به Promise تا بتونیم با await کار کنیم
+      const rows = await new Promise((resolve, reject) => {
+        db.all(`SELECT user_id FROM users WHERE banned=0`, (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        });
       });
-    });
 
-    case 'referral':
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, `می‌خوای امتیاز بیشتری بگیری؟ 🎁
+      // اینجا کد اضافه کردن امتیاز به همه‌ی کاربران
+      for (const row of rows) {
+        await new Promise((resolve, reject) => {
+          db.run(`UPDATE users SET points = points + ? WHERE user_id = ?`, [amount, row.user_id], (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+      }
+
+      await bot.sendMessage(userId, `با موفقیت ${amount} امتیاز به همه کاربران اضافه شد.`);
+      userState[userId] = {};  // پاک کردن حالت کاربر
+    } catch (error) {
+      console.error(error);
+      await bot.sendMessage(userId, 'خطا در افزودن امتیاز به همه کاربران رخ داد.');
+    }
+    break;
+  }
+
+  case 'referral': {
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, `می‌خوای امتیاز بیشتری بگیری؟ 🎁
 لینک اختصاصی خودتو برای دوستات بفرست!
 هر کسی که با لینک تو وارد ربات بشه، ۵ امتیاز دائمی می‌گیری ⭐️
 لینک دعوت مخصوص شما⬇️:\nhttps://t.me/mlbbratebot?start=${userId}`);
-
-case 'add_points_all':
-  if (userId !== adminId) {
-    await bot.answerCallbackQuery(query.id, { text: 'شما دسترسی ندارید.', show_alert: true });
-    return;
   }
-  userState[userId] = { step: 'add_points_all_enter' };
-  await bot.answerCallbackQuery(query.id);
-  return bot.sendMessage(userId, 'مقدار امتیازی که می‌خواهید به همه بدهید را وارد کنید:');
 
-    case 'profile':
-      await bot.answerCallbackQuery(query.id);
-      const invitesCount = user.invites || 0;
-      return bot.sendMessage(userId, `🆔 آیدی عددی: ${userId}\n⭐ امتیاز فعلی: ${user.points}\n📨 تعداد دعوتی‌ها: ${invitesCount}`);
+  case 'add_points_all': {
+    if (userId !== adminId) {
+      await bot.answerCallbackQuery(query.id, { text: 'شما دسترسی ندارید.', show_alert: true });
+      return;
+    }
+    userState[userId] = { step: 'add_points_all_enter' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'مقدار امتیازی که می‌خواهید به همه بدهید را وارد کنید:');
+  }
 
-    case 'buy':
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, '🎁 برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:\n\n📩 @Beast3694');
+  case 'profile': {
+    await bot.answerCallbackQuery(query.id);
+    const invitesCount = user.invites || 0;
+    return bot.sendMessage(userId, `🆔 آیدی عددی: ${userId}\n⭐ امتیاز فعلی: ${user.points}\n📨 تعداد دعوتی‌ها: ${invitesCount}`);
+  }
+
+  case 'buy': {
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, '🎁 برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:\n\n📩 @Beast3694');
+  }
+
+  // بقیه case ها ...
 
     case 'chance': {
       await bot.answerCallbackQuery(query.id);
