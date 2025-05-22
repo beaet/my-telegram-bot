@@ -1,14 +1,14 @@
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
-require('dotenv').config();  // باید در بالای فایل باشه
 
 const app = express();
 
-const token = process.env.BOT_TOKEN;            // توکن ربات
-const adminId = Number(process.env.ADMIN_ID);   // آیدی ادمین
-const webhookUrl = process.env.WEBHOOK_URL;     // آدرس وبهوک
-const port = process.env.PORT || 10000;         // پورت
+const token = '8129314550:AAFQTvL8VVg-4QtQD8QLY03LCWiSP1uaCak';  // توکن ربات
+const adminId = 381183017;  // آیدی ادمین
+const webhookUrl = 'https://my-telegram-bot-albl.onrender.com';  // آدرس وبهوک شما
+const port = process.env.PORT || 10000;
+
 // تنظیم وبهوک و ربات
 const bot = new TelegramBot(token, { polling: false });
 bot.setWebHook(`${webhookUrl}/bot${token}`);
@@ -81,57 +81,6 @@ function ensureUser(user) {
       db.run(`INSERT INTO users (user_id, username, points) VALUES (?, ?, 5)`, [user.id, user.username || ''], (err) => {
         if (err) console.error('خطا در درج کاربر جدید:', err);
       });
-    }
-  });
-}
-
-// هندلر پیام‌ها (خصوصاً /start با پارامتر دعوت)
-bot.on('message', (msg) => {
-  const userId = msg.from.id;
-  let refId = null;
-
-  if (msg.text && msg.text.startsWith('/start')) {
-    const parts = msg.text.split(' ');
-    if (parts.length > 1) {
-      refId = parts[1];  // شناسه دعوت‌کننده
-    }
-
-    // ثبت یا اطمینان از وجود کاربر با امتیاز اولیه ۵
-    db.run(
-      `INSERT OR IGNORE INTO users (user_id, username, points, invites) VALUES (?, ?, 5, 0)`,
-      [userId, msg.from.username || ''],
-      (err) => {
-        if (err) {
-          console.error('خطا در درج کاربر جدید:', err);
-          return;
-        }
-
-        // اگر لینک دعوت بود و دعوت‌کننده متفاوت بود
-        if (refId && refId != userId) {
-          updatePoints(refId, 5);
-          db.run(`UPDATE users SET invites = invites + 1 WHERE user_id = ?`, [refId], (err) => {
-            if (err) {
-              console.error('خطا در افزایش تعداد دعوت‌ها:', err);
-              return;
-            }
-            bot.sendMessage(
-              refId,
-              `🚀 کاربر *${msg.from.username || userId}* با لینک دعوت شما وارد شد! ✨ شما ۵ امتیاز جایزه گرفتید!`,
-              { parse_mode: 'Markdown' }
-            );
-          });
-        }
-      }
-    );
-  }
-});
-
-function updatePoints(userId, amount) {
-  db.run(`UPDATE users SET points = points + ? WHERE user_id = ?`, [amount, userId], (err) => {
-    if (err) {
-      console.error('خطا در افزایش امتیاز:', err);
-    } else {
-      console.log(`امتیاز ${amount} به کاربر ${userId} اضافه شد.`);
     }
   });
 }
@@ -235,6 +184,22 @@ bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
 
   resetUserState(userId);
 
+  // مدیریت دعوت
+if (refId && refId !== userId) {
+  db.get(`SELECT invites FROM users WHERE user_id = ?`, [userId], (err, row) => {
+    if (!row) {
+      // کاربر جدیدی که دعوت شده
+      db.run(`INSERT INTO users (user_id, username, points, invites) VALUES (?, ?, 5, 0)`, [userId, msg.from.username || '']);
+      
+      // به دعوت‌کننده امتیاز اضافه کن
+      updatePoints(refId, 5);
+
+      // افزایش تعداد دعوتی‌ها برای دعوت‌کننده
+      db.run(`UPDATE users SET invites = invites + 1 WHERE user_id = ?`, [refId]);
+    }
+  });
+}
+
   sendMainMenu(userId);
 });
 
@@ -261,10 +226,6 @@ bot.onText(/\/panel/, async (msg) => {
         ],
         [
           { text: '🌐تغییر متن راهنما', callback_data: 'edit_help' }
-        ],
-        [
-          { text: '🎯 دادن امتیاز به همه', callback_data: 'add_points_all' },
-          { text: '↩️ بازگشت', callback_data: 'panel_back' }
         ]
       ]
     }
@@ -275,6 +236,14 @@ bot.onText(/\/panel/, async (msg) => {
 bot.on('callback_query', async (query) => {
   const userId = query.from.id;
   const data = query.data;
+  switch (data) {
+  case 'add_points_all':
+    userState[userId] = { step: 'add_points_all_enter' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'لطفا مقدار امتیازی که می‌خواهید به همه کاربران اضافه شود را وارد کنید یا /cancel برای لغو:');
+
+  // سایر case ها مثل panel_back و ...
+}
   const user = await getUser(userId);
   if (!user) return bot.answerCallbackQuery(query.id);
 
@@ -295,15 +264,6 @@ bot.on('callback_query', async (query) => {
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, 'تعداد کل بازی‌ها را وارد کن:');
 
-case 'add_points_all':
-  if (userId !== adminId) {
-    await bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
-    return;
-  }
-  userState[userId] = { step: 'add_points_all_enter' };
-  await bot.answerCallbackQuery(query.id);
-  return bot.sendMessage(userId, 'لطفاً مقدار امتیاز برای اضافه کردن به همه کاربران را وارد کنید:');
-
     case 'referral':
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, `می‌خوای امتیاز بیشتری بگیری؟ 🎁
@@ -319,34 +279,6 @@ return bot.sendMessage(userId, `🆔 آیدی عددی: ${userId}\n⭐ امتی�
     case 'buy':
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, '🎁 برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:\n\n📩 @Beast3694');
-
-if (state.step === 'add_points_all_enter') {
-  if (!/^\d+$/.test(text)) {
-    return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید یا /cancel برای لغو.');
-  }
-  const amount = parseInt(text);
-
-  db.all(`SELECT user_id FROM users WHERE banned=0`, async (err, rows) => {
-  if (err) {
-    bot.sendMessage(userId, 'خطا در دریافت کاربران.');
-    resetUserState(userId);
-    return;
-  }
-
-  for (const row of rows) {
-    await updatePoints(row.user_id, amount); // فرض بر اینه که updatePoints یه Promise هست
-  }
-
-  bot.sendMessage(userId, `امتیاز ${amount} به تمام کاربران فعال اضافه شد.`);
-
-  for (const [index, row] of rows.entries()) {
-    setTimeout(() => {
-      bot.sendMessage(row.user_id, `📢 امتیاز ${amount} از طرف پنل مدیریت به حساب شما افزوده شد.`);
-    }, index * 100); // هر پیام با فاصله 100 میلی‌ثانیه ارسال میشه
-  }
-
-  resetUserState(userId);
-});
 
 case 'chance':
   {
@@ -385,6 +317,13 @@ case 'chance':
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, 'شما وارد بخش پشتیبانی شده‌اید!\nپیام شما به من فوروارد خواهد شد 📤\nبرای خروج و بازگشت به منوی اصلی، دستور /start را ارسال کنید ⏪');
 
+    // فرض بر اینه که bot، userState، adminId، و توابع کمکی مثل getHelpText و getUser تعریف شده‌اند
+
+bot.on('callback_query', async (query) => {
+  const data = query.data;
+  const userId = query.from.id;
+
+  switch (data) {
     case 'help':
       await bot.answerCallbackQuery(query.id);
       const helpText = await getHelpText();
@@ -415,17 +354,19 @@ case 'chance':
       userState[userId] = { step: 'edit_help' };
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, 'متن جدید راهنما را ارسال کنید یا /cancel برای لغو:');
+
+    default:
+      await bot.answerCallbackQuery(query.id, { text: 'دستور نامشخص است.' });
+      break;
   }
 });
 
-// هندل پیام‌های ورودی برای مراحل مختلف
 bot.on('message', async (msg) => {
   const userId = msg.from.id;
   const text = msg.text;
 
   if (!userState[userId]) return; // اگر در مرحله‌ای نبود، کاری نکن
 
-  // اگر کاربر بن شده باشد
   const user = await getUser(userId);
   if (user?.banned) {
     return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده ندارید.');
@@ -433,28 +374,74 @@ bot.on('message', async (msg) => {
 
   const state = userState[userId];
 
-  // لغو عملیات با دستور /cancel
+  // لغو عملیات
   if (text === '/cancel') {
-    resetUserState(userId);
-    return bot.sendMessage(userId, 'عملیات لغو شد.', {
-      reply_markup: { remove_keyboard: true }
-    });
+    delete userState[userId];
+    return bot.sendMessage(userId, 'عملیات لغو شد.', { reply_markup: { remove_keyboard: true } });
   }
 
-  // مراحل پنل مدیریت (ادمین)
   if (userId === adminId) {
     switch (state.step) {
       case 'enter_id':
-        if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک آیدی عددی معتبر وارد کنید.');
+        if (!/^\d+$/.test(text)) {
+          return bot.sendMessage(userId, 'لطفا یک آیدی عددی معتبر وارد کنید.');
+        }
         state.targetId = parseInt(text);
+        state.step = 'enter_points';
+        return bot.sendMessage(userId, state.type === 'add' ? 'تعداد امتیاز برای اضافه کردن را وارد کنید:' : 'تعداد امتیاز برای کسر را وارد کنید:');
+
+      case 'enter_points':
+        if (!/^\d+$/.test(text)) {
+          return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید.');
+        }
+        const points = parseInt(text);
         if (state.type === 'add') {
-          state.step = 'enter_points';
-          return bot.sendMessage(userId, 'تعداد امتیاز برای اضافه کردن را وارد کنید:');
+          // اینجا کد اضافه کردن امتیاز به کاربر
+          await addPointsToUser(state.targetId, points);
+          delete userState[userId];
+          return bot.sendMessage(userId, `با موفقیت ${points} امتیاز اضافه شد به کاربر ${state.targetId}.`);
         } else if (state.type === 'sub') {
-          state.step = 'enter_points';
-          return bot.sendMessage(userId, 'تعداد امتیاز برای کسر را وارد کنید:');
+          // اینجا کد کسر امتیاز از کاربر
+          await subtractPointsFromUser(state.targetId, points);
+          delete userState[userId];
+          return bot.sendMessage(userId, `با موفقیت ${points} امتیاز از کاربر ${state.targetId} کسر شد.`);
         }
         break;
+
+      case 'broadcast':
+        // ارسال پیام همگانی به همه کاربران
+        await broadcastMessage(text);
+        delete userState[userId];
+        return bot.sendMessage(userId, 'پیام همگانی با موفقیت ارسال شد.');
+
+      case 'ban_enter_id':
+        if (!/^\d+$/.test(text)) {
+          return bot.sendMessage(userId, 'لطفا یک آیدی عددی معتبر وارد کنید.');
+        }
+        await banUser(parseInt(text));
+        delete userState[userId];
+        return bot.sendMessage(userId, `کاربر ${text} بن شد.`);
+
+      case 'unban_enter_id':
+        if (!/^\d+$/.test(text)) {
+          return bot.sendMessage(userId, 'لطفا یک آیدی عددی معتبر وارد کنید.');
+        }
+        await unbanUser(parseInt(text));
+        delete userState[userId];
+        return bot.sendMessage(userId, `کاربر ${text} آن‌بن شد.`);
+
+      case 'edit_help':
+        await updateHelpText(text);
+        delete userState[userId];
+        return bot.sendMessage(userId, 'متن راهنما با موفقیت به‌روزرسانی شد.');
+
+      default:
+        return bot.sendMessage(userId, 'مرحله نامشخص است.');
+    }
+  } else {
+    return bot.sendMessage(userId, 'شما اجازه دسترسی به این بخش را ندارید.');
+  }
+});
 
       case 'enter_points':
         if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید.');
