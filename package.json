@@ -1,16 +1,20 @@
 {
   "name": "telegram-rate-bot",
   "version": "1.0.0",
-  "description": "Telegram bot with rate calculation and admin features",
+  "description": "A Telegram bot for rate calculation and more",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
-  "author": "YourName",
-  "license": "MIT",
   "dependencies": {
+    "express": "^4.18.2",
+    "mongoose": "^7.3.1",
     "dotenv": "^16.3.1",
-    "mongoose": "^7.3.4",
     "node-telegram-bot-api": "^0.61.0"
-  }
+  },
+  "engines": {
+    "node": ">=14"
+  },
+  "author": "",
+  "license": "ISC"
 }
