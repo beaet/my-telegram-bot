@@ -295,6 +295,15 @@ bot.on('callback_query', async (query) => {
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, 'تعداد کل بازی‌ها را وارد کن:');
 
+case 'add_points_all':
+  if (userId !== adminId) {
+    await bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
+    return;
+  }
+  userState[userId] = { step: 'add_points_all_enter' };
+  await bot.answerCallbackQuery(query.id);
+  return bot.sendMessage(userId, 'لطفاً مقدار امتیاز برای اضافه کردن به همه کاربران را وارد کنید:');
+
     case 'referral':
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, `می‌خوای امتیاز بیشتری بگیری؟ 🎁
@@ -311,13 +320,12 @@ return bot.sendMessage(userId, `🆔 آیدی عددی: ${userId}\n⭐ امتی�
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, '🎁 برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:\n\n📩 @Beast3694');
 
-case 'add_points_all_enter':
+if (state.step === 'add_points_all_enter') {
   if (!/^\d+$/.test(text)) {
     return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید یا /cancel برای لغو.');
   }
   const amount = parseInt(text);
 
-  // گرفتن همه کاربران که بن نیستند
   db.all(`SELECT user_id FROM users WHERE banned=0`, (err, rows) => {
     if (err) {
       bot.sendMessage(userId, 'خطا در دریافت کاربران.');
@@ -330,14 +338,14 @@ case 'add_points_all_enter':
     });
 
     bot.sendMessage(userId, `امتیاز ${amount} به تمام کاربران فعال اضافه شد.`);
-    // ارسال اطلاعیه به همه کاربران
     rows.forEach(row => {
       bot.sendMessage(row.user_id, `📢 امتیاز ${amount} از طرف پنل مدیریت به حساب شما افزوده شد.`);
     });
 
     resetUserState(userId);
   });
-  break;
+  return;
+}
 
 case 'chance':
   {
