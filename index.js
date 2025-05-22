@@ -1,8 +1,8 @@
+require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const { initializeApp } = require('firebase/app');
 const { getDatabase, ref, set, get, update, remove } = require('firebase/database');
-require('dotenv').config();
 
 const app = express();
 
@@ -13,7 +13,7 @@ const port = process.env.PORT || 10000;
 
 // ---- Firebase Config ----
 const firebaseConfig = {
-  databaseURL: "https://newproject30-3a109-default-rtdb.firebaseio.com/",
+  databaseURL: process.env.DATABASE_URL,
 };
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getDatabase(firebaseApp);
