@@ -601,42 +601,41 @@ bot.on('message', async (msg) => {
 });
 
       case 'broadcast':
-        resetUserState(userId);
-        bot.sendMessage(userId, 'پیام در حال ارسال به همه کاربران...');
-        try {
-          const rows = await new Promise((res, rej) => {
-            db.all(`SELECT user_id FROM users WHERE banned=0`, (err, rows) => err ? rej(err) : res(rows));
-          });
-          rows.forEach((row, i) => {
-            setTimeout(() => {
-              bot.sendMessage(row.user_id, `پیام همگانی:\n\n${text}`).catch(() => { });
-            }, i * 100);
-          });
-        } catch {
-          bot.sendMessage(userId, 'خطا در ارسال پیام همگانی.');
-        }
-        break;
-
-      case 'ban_enter_id':
-        if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک آیدی عددی معتبر وارد کنید.');
-        const banId = parseInt(text);
-        await setBanStatus(banId, true);
-        resetUserState(userId);
-        return bot.sendMessage(userId, `کاربر ${banId} بن شد.`);
-
-      case 'unban_enter_id':
-        if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک آیدی عددی معتبر وارد کنید.');
-        const unbanId = parseInt(text);
-        await setBanStatus(unbanId, false);
-        resetUserState(userId);
-        return bot.sendMessage(userId, `کاربر ${unbanId} آن‌بن شد.`);
-
-      case 'edit_help':
-        await setHelpText(text);
-        resetUserState(userId);
-        return bot.sendMessage(userId, 'متن راهنما با موفقیت بروزرسانی شد.');
+    resetUserState(userId);
+    bot.sendMessage(userId, 'پیام در حال ارسال به همه کاربران...');
+    try {
+      const rows = await new Promise((res, rej) => {
+        db.all(`SELECT user_id FROM users WHERE banned=0`, (err, rows) => err ? rej(err) : res(rows));
+      });
+      rows.forEach((row, i) => {
+        setTimeout(() => {
+          bot.sendMessage(row.user_id, `پیام همگانی:\n\n${text}`).catch(() => { });
+        }, i * 100);
+      });
+    } catch {
+      bot.sendMessage(userId, 'خطا در ارسال پیام همگانی.');
     }
-  }
+    break;
+
+  case 'ban_enter_id':
+    if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک آیدی عددی معتبر وارد کنید.');
+    const banId = parseInt(text);
+    await setBanStatus(banId, true);
+    resetUserState(userId);
+    return bot.sendMessage(userId, `کاربر ${banId} بن شد.`);
+
+  case 'unban_enter_id':
+    if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفا یک آیدی عددی معتبر وارد کنید.');
+    const unbanId = parseInt(text);
+    await setBanStatus(unbanId, false);
+    resetUserState(userId);
+    return bot.sendMessage(userId, `کاربر ${unbanId} آن‌بن شد.`);
+
+  case 'edit_help':
+    await setHelpText(text);
+    resetUserState(userId);
+    return bot.sendMessage(userId, 'متن راهنما با موفقیت بروزرسانی شد.');
+}
 
 
   // مراحل محاسبه ریت یا برد/باخت برای کاربران عادی
