@@ -1,14 +1,14 @@
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
+require('dotenv').config();  // باید در بالای فایل باشه
 
 const app = express();
 
-const token = '8129314550:AAFQTvL8VVg-4QtQD8QLY03LCWiSP1uaCak';  // توکن ربات
-const adminId = 381183017;  // آیدی ادمین
-const webhookUrl = 'https://my-telegram-bot-albl.onrender.com';  // آدرس وبهوک شما
-const port = process.env.PORT || 10000;
-
+const token = process.env.BOT_TOKEN;            // توکن ربات
+const adminId = Number(process.env.ADMIN_ID);   // آیدی ادمین
+const webhookUrl = process.env.WEBHOOK_URL;     // آدرس وبهوک
+const port = process.env.PORT || 10000;         // پورت
 // تنظیم وبهوک و ربات
 const bot = new TelegramBot(token, { polling: false });
 bot.setWebHook(`${webhookUrl}/bot${token}`);
