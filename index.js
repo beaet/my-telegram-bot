@@ -71,14 +71,28 @@ const db = new sqlite3.Database('./botdata.sqlite', (err) => {
 const userState = {};
 
 // کمک برای ایجاد یا اطمینان از وجود کاربر در دیتابیس
-db.run(`INSERT INTO users (user_id, username, points, banned, last_chance_use, invites) VALUES (?, ?, ?, 0, 0, 0)`, [user.id, user.username || '', 5], (err) => {
+function ensureUser(user) {
+  if (!user || !user.id) return;
+
+  db.get(`SELECT user_id FROM users WHERE user_id = ?`, [user.id], (err, row) => {
+    if (err) {
       console.error('خطا در انتخاب کاربر:', err);
       return;
     }
+
     if (!row) {
-      db.run(`INSERT INTO users (user_id, username, points) VALUES (?, ?, 5)`, [user.id, user.username || ''], (err) => {
-        if (err) console.error('خطا در درج کاربر جدید:', err);
-      });
+      const username = user.username || '';
+      db.run(
+        `INSERT INTO users (user_id, username, points) VALUES (?, ?, 5)`,
+        [user.id, username],
+        (err) => {
+          if (err) {
+            console.error('خطا در درج کاربر جدید:', err);
+          } else {
+            console.log(`کاربر جدید با آیدی ${user.id} اضافه شد.`);
+          }
+        }
+      );
     }
   });
 }
