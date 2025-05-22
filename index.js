@@ -93,7 +93,7 @@ bot.on('message', (msg) => {
   if (msg.text && msg.text.startsWith('/start')) {
     const parts = msg.text.split(' ');
     if (parts.length > 1) {
-      refId = parts[1];  // شناسه دعوت‌کننده
+      refId = parts[1];
     }
 
     db.get(`SELECT * FROM users WHERE user_id = ?`, [userId], (err, row) => {
@@ -101,39 +101,30 @@ bot.on('message', (msg) => {
         console.error(err);
         return;
       }
-
       if (!row) {
-        // اگر کاربر جدید بود ثبتش کن
+        // ثبت کاربر جدید
         db.run(`INSERT INTO users (user_id, username, points, invites) VALUES (?, ?, 0, 0)`, [userId, msg.from.username || ''], (err) => {
           if (err) {
             console.error(err);
             return;
           }
 
-          if (refId && refId != userId) {
+          if (refId && refId !== userId) {
+            // اضافه کردن امتیاز دعوت‌کننده
             updatePoints(refId, 5);
 
-            // افزایش تعداد دعوت شده‌ها
             db.run(`UPDATE users SET invites = invites + 1 WHERE user_id = ?`, [refId], (err) => {
               if (err) {
                 console.error(err);
                 return;
               }
-              
-              // اینجا لاگ برای دیباگ بذار
-              console.log(`در حال ارسال پیام به دعوت‌کننده: ${refId}`);
-
-              // ارسال پیام به دعوت‌کننده با بررسی خطا
-              bot.sendMessage(refId, `کاربر ${msg.from.username || userId} با لینک دعوت شما وارد شد و 5 امتیاز گرفتید.`)
-                .then(() => {
-                  console.log('پیام دعوت‌کننده ارسال شد.');
-                })
-                .catch((error) => {
-                  console.error('خطا در ارسال پیام به دعوت‌کننده:', error.response?.body || error.message || error);
-                });
+              // ارسال پیام به دعوت‌کننده
+              bot.sendMessage(refId, `🚀 کاربر *${msg.from.username || userId}* با لینک دعوت شما وارد شد! ✨ شما ۵ امتیاز جایزه گرفتید!`, { parse_mode: 'Markdown' });
             });
           }
         });
+      } else {
+        // اگر کاربر قبلاً ثبت شده بود، می‌تونی اینجا کاری نکنی یا پیام خوش آمد بگی
       }
     });
   }
