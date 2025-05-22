@@ -74,27 +74,19 @@ const userState = {};
 function ensureUser(user) {
   if (!user || !user.id) return;
 
-  db.get(`SELECT user_id FROM users WHERE user_id = ?`, [user.id], (err, row) => {
-    if (err) {
-      console.error('خطا در انتخاب کاربر:', err);
-      return;
-    }
+  const username = user.username || '';
 
-    if (!row) {
-      const username = user.username || '';
-      db.run(
-        `INSERT INTO users (user_id, username, points) VALUES (?, ?, 5)`,
-        [user.id, username],
-        (err) => {
-          if (err) {
-            console.error('خطا در درج کاربر جدید:', err);
-          } else {
-            console.log(`کاربر جدید با آیدی ${user.id} اضافه شد.`);
-          }
-        }
-      );
+  db.run(
+    `INSERT OR IGNORE INTO users (user_id, username, points) VALUES (?, ?, 5)`,
+    [user.id, username],
+    (err) => {
+      if (err) {
+        console.error('خطا در درج کاربر جدید:', err);
+      } else {
+        console.log(`تلاش برای درج کاربر با آیدی ${user.id} انجام شد.`);
+      }
     }
-  });
+  );
 }
 
 // هندلر پیام‌ها (خصوصاً /start با پارامتر دعوت)
