@@ -323,48 +323,38 @@ return bot.sendMessage(userId, `🆔 آیدی عددی: ${userId}\n⭐ امتی�
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, '🎁 برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:\n\n📩 @Beast3694');
 
-if (state.step === 'add_points_all_enter') {
+case 'add_points_all_enter':
   if (!/^\d+$/.test(text)) {
     return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید یا /cancel برای لغو.');
   }
   const amount = parseInt(text);
 
   db.all(`SELECT user_id FROM users WHERE banned=0`, async (err, rows) => {
-  if (err) {
-    bot.sendMessage(userId, 'خطا در دریافت کاربران.');
-    resetUserState(userId);
-    return;
-  }
-
-  for (const row of rows) {
-    await updatePoints(row.user_id, amount); // فرض بر اینه که updatePoints یه Promise هست
-  }
-
-  bot.sendMessage(userId, `امتیاز ${amount} به تمام کاربران فعال اضافه شد.`);
-
-  for (const [index, row] of rows.entries()) {
-    setTimeout(() => {
-      bot.sendMessage(row.user_id, `📢 امتیاز ${amount} از طرف پنل مدیریت به حساب شما افزوده شد.`);
-    }, index * 100); // هر پیام با فاصله 100 میلی‌ثانیه ارسال میشه
-  }
-
-  resetUserState(userId);
-});
-
-case 'chance':
-  {
-    const now = Date.now();
-    const lastUse = await getLastChanceUse(userId);
-
-    const diff = now - lastUse;
-    if (diff < 24 * 60 * 60 * 1000) {
-      const hoursLeft = Math.ceil((24 * 60 * 60 * 1000 - diff) / (60 * 60 * 1000));
-      await bot.answerCallbackQuery(query.id, {
-        text: `شما فقط هر ۲۴ ساعت یک بار می‌توانید این گزینه را استفاده کنید. لطفا ${hoursLeft} ساعت دیگر تلاش کنید.`,
-        show_alert: true
-      });
+    if (err) {
+      await bot.sendMessage(userId, 'خطا در دریافت کاربران.');
+      resetUserState(userId);
       return;
     }
+
+    for (const row of rows) {
+      await updatePoints(row.user_id, amount);
+    }
+
+    await bot.sendMessage(userId, `امتیاز ${amount} به تمام کاربران فعال اضافه شد.`);
+
+    for (const [index, row] of rows.entries()) {
+      setTimeout(() => {
+        bot.sendMessage(row.user_id, `📢 امتیاز ${amount} از طرف پنل مدیریت به حساب شما افزوده شد.`);
+      }, index * 100);
+    }
+
+    resetUserState(userId);
+  });
+
+  break;  // <---- اضافه کردن break اینجا
+
+case 'chance':
+  // ادامه کد
 
     const dice = Math.floor(Math.random() * 6) + 1;
     let message = `تاس شما: ${dice}\n`;
