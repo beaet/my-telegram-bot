@@ -71,9 +71,7 @@ const db = new sqlite3.Database('./botdata.sqlite', (err) => {
 const userState = {};
 
 // کمک برای ایجاد یا اطمینان از وجود کاربر در دیتابیس
-function ensureUser(user) {
-  db.get(`SELECT user_id FROM users WHERE user_id = ?`, [user.id], (err, row) => {
-    if (err) {
+db.run(`INSERT INTO users (user_id, username, points, banned, last_chance_use, invites) VALUES (?, ?, ?, 0, 0, 0)`, [user.id, user.username || '', 5], (err) => {
       console.error('خطا در انتخاب کاربر:', err);
       return;
     }
