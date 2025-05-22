@@ -91,30 +91,18 @@ const userState = {};
 async function ensureUser(user) {
   if (!user || !user.id) return;
   return new Promise((resolve, reject) => {
-    db.get(`SELECT user_id FROM users WHERE user_id = ?`, [user.id], (err, row) => {
-      if (err) {
-        console.error('خطا در انتخاب کاربر:', err);
-        return reject(err);
-      }
-      if (!row) {
-        const username = user.username || '';
-        db.run(
-          `INSERT INTO users (user_id, username, points) VALUES (?, ?, 5)`,
-          [user.id, username],
-          (err) => {
-            if (err) {
-              console.error('خطا در درج کاربر جدید:', err);
-              return reject(err);
-            } else {
-              console.log(`کاربر جدید با آیدی ${user.id} اضافه شد.`);
-              resolve();
-            }
-          }
-        );
-      } else {
+    const username = user.username || '';
+    db.run(
+      `INSERT OR IGNORE INTO users (user_id, username, points) VALUES (?, ?, 5)`,
+      [user.id, username],
+      (err) => {
+        if (err) {
+          console.error('خطا در درج کاربر جدید:', err);
+          return reject(err);
+        }
         resolve();
       }
-    });
+    );
   });
 }
 
