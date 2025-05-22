@@ -245,26 +245,37 @@ bot.onText(/\/panel/, async (msg) => {
     return bot.sendMessage(userId, 'شما دسترسی به پنل مدیریت ندارید.');
   }
 
+case 'add_points_all':
+  userState[userId] = { step: 'add_points_all_enter' };
+  await bot.answerCallbackQuery(query.id);
+  return bot.sendMessage(userId, 'لطفا مقدار امتیازی که می‌خواهید به همه کاربران اضافه شود را وارد کنید یا /cancel برای لغو:');
+
+case 'panel_back':
+  await bot.answerCallbackQuery(query.id);
+
   bot.sendMessage(userId, 'پنل مدیریت:', {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          { text: '➕ افزودن امتیاز', callback_data: 'add_points' },
-          { text: '➖ کسر امتیاز', callback_data: 'sub_points' }
-        ],
-        [
-          { text: '📢 پیام همگانی', callback_data: 'broadcast' }
-        ],
-        [
-          { text: '🚫بن کردن کاربر', callback_data: 'ban_user' },
-          { text: '☑️حذف بن کاربر', callback_data: 'unban_user' }
-        ],
-        [
-          { text: '🌐تغییر متن راهنما', callback_data: 'edit_help' }
-        ]
+  reply_markup: {
+    inline_keyboard: [
+      [
+        { text: '➕ افزودن امتیاز', callback_data: 'add_points' },
+        { text: '➖ کسر امتیاز', callback_data: 'sub_points' }
+      ],
+      [
+        { text: '📢 پیام همگانی', callback_data: 'broadcast' }
+      ],
+      [
+        { text: '🚫بن کردن کاربر', callback_data: 'ban_user' },
+        { text: '☑️حذف بن کاربر', callback_data: 'unban_user' }
+      ],
+      [
+        { text: '🌐تغییر متن راهنما', callback_data: 'edit_help' }
+      ],
+      [ // اضافه کن این ردیف جدید
+        { text: '🎯 دادن امتیاز به همه', callback_data: 'add_points_all' },
+        { text: '↩️ بازگشت', callback_data: 'panel_back' }
       ]
-    }
-  });
+    ]
+  }
 });
 
 // هندل کلیک روی دکمه‌های منو و پنل مدیریت
@@ -306,6 +317,34 @@ return bot.sendMessage(userId, `🆔 آیدی عددی: ${userId}\n⭐ امتی�
     case 'buy':
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, '🎁 برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:\n\n📩 @Beast3694');
+
+case 'add_points_all_enter':
+  if (!/^\d+$/.test(text)) {
+    return bot.sendMessage(userId, 'لطفا یک عدد معتبر وارد کنید یا /cancel برای لغو.');
+  }
+  const amount = parseInt(text);
+
+  // گرفتن همه کاربران که بن نیستند
+  db.all(`SELECT user_id FROM users WHERE banned=0`, (err, rows) => {
+    if (err) {
+      bot.sendMessage(userId, 'خطا در دریافت کاربران.');
+      resetUserState(userId);
+      return;
+    }
+
+    rows.forEach(row => {
+      updatePoints(row.user_id, amount);
+    });
+
+    bot.sendMessage(userId, `امتیاز ${amount} به تمام کاربران فعال اضافه شد.`);
+    // ارسال اطلاعیه به همه کاربران
+    rows.forEach(row => {
+      bot.sendMessage(row.user_id, `📢 امتیاز ${amount} از طرف پنل مدیریت به حساب شما افزوده شد.`);
+    });
+
+    resetUserState(userId);
+  });
+  break;
 
 case 'chance':
   {
