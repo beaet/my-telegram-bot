@@ -255,7 +255,7 @@ bot.on('callback_query', async (query) => {
   if (!user) return await bot.answerCallbackQuery(query.id, { text: 'خطا در دریافت اطلاعات کاربر.', show_alert: true });
   if (user?.banned) return await bot.answerCallbackQuery(query.id, { text: 'شما بن شده‌اید و اجازه استفاده ندارید.', show_alert: true });
 
-  // ---- آمار ربات ----
+  // --- آمار ربات ---
   if (data === 'bot_stats' && userId === adminId) {
     const usersSnap = await get(ref(db, 'users'));
     const users = usersSnap.exists() ? Object.values(usersSnap.val()) : [];
