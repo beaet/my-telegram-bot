@@ -154,13 +154,16 @@ app.post(`/bot${token}`, (req, res) => {
 });
 
 // ---- Main Menu ----
-function sendMainMenu(userId) {
-  const keyboard = {
+function mainMenuKeyboard() {
+  return {
     reply_markup: {
       inline_keyboard: [
         [
           { text: '📊محاسبه ریت', callback_data: 'calculate_rate' },
           { text: '🏆محاسبه برد/باخت', callback_data: 'calculate_wl' }
+        ],
+        [
+          { text: '📜 لیست پیک/بن', callback_data: 'pickban_list' }
         ],
         [
           { text: '🔗دعوت دوستان', callback_data: 'referral' },
@@ -186,7 +189,18 @@ function sendMainMenu(userId) {
       ]
     }
   };
-  bot.sendMessage(userId, 'سلام، به ربات محاسبه‌گر Mobile Legends خوش آمدید ✨', keyboard);
+}
+function sendMainMenu(userId, messageId = null) {
+  const text = 'سلام، به ربات محاسبه‌گر Mobile Legends خوش آمدید ✨';
+  if (messageId) {
+    bot.editMessageText(text, {
+      chat_id: userId,
+      message_id: messageId,
+      ...mainMenuKeyboard()
+    });
+  } else {
+    bot.sendMessage(userId, text, mainMenuKeyboard());
+  }
 }
 
 // ---- /start with referral ----
@@ -262,6 +276,7 @@ bot.onText(/\/panel/, async (msg) => {
 bot.on('callback_query', async (query) => {
   const userId = query.from.id;
   const data = query.data;
+  const messageId = query.message && query.message.message_id;
 
   // ---- Anti-Spam ----
   if (userId !== adminId) {
@@ -281,9 +296,78 @@ bot.on('callback_query', async (query) => {
     }
   }
 
+  // ---- Main menu back ----
+  if (data === 'main_menu') {
+    await bot.answerCallbackQuery(query.id);
+    sendMainMenu(userId, messageId);
+    return;
+  }
+
   const user = await getUser(userId);
   if (!user) return await bot.answerCallbackQuery(query.id, { text: 'خطا در دریافت اطلاعات کاربر.', show_alert: true });
   if (user?.banned) return await bot.answerCallbackQuery(query.id, { text: 'شما بن شده‌اید و اجازه استفاده ندارید.', show_alert: true });
+
+  // ---- لیست پیک/بن ----
+  if (data === 'pickban_list') {
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId,
+      'جهت مشاهده لیست بیشترین پیک ریت و بن در این سیزن روی دکمه زیر کلیک کنید:',
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: 'مشاهده در سایت رسمی', url: 'https://www.mobilelegends.com/rank' }],
+            [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
+          ]
+        }
+      }
+    );
+  }
+
+  // ---- بخش شانس ----
+  if (data === 'chance') {
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'نوع شانس خود را انتخاب کن:', {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '🎲 تاس', callback_data: 'chance_dice' },
+            { text: '⚽ فوتبال', callback_data: 'chance_football' },
+            { text: '🎯 دارت', callback_data: 'chance_dart' }
+          ],
+          [
+            { text: 'بازگشت 🔙', callback_data: 'main_menu' }
+          ]
+        ]
+      }
+    });
+  }
+  if (data === 'chance_dice' || data === 'chance_football' || data === 'chance_dart') {
+    const now = Date.now();
+    const lastUse = user.last_chance_use || 0;
+    if (userId !== adminId && now - lastUse < 24 * 60 * 60 * 1000) {
+      await bot.answerCallbackQuery(query.id, { text: 'تا ۲۴ ساعت آینده نمی‌تونی دوباره امتحان کنی.', show_alert: true });
+      return;
+    }
+    let emoji, winValue, prize, readable;
+    if (data === 'chance_dice') {
+      emoji = '🎲'; winValue = 6; prize = 2; readable = 'عدد ۶';
+    } else if (data === 'chance_football') {
+      emoji = '⚽'; winValue = 3; prize = 1; readable = 'GOAL';
+    } else if (data === 'chance_dart') {
+      emoji = '🎯'; winValue = 6; prize = 1; readable = 'BULLSEYE';
+    }
+    const diceMsg = await bot.sendDice(userId, { emoji });
+    let isWin = diceMsg.dice.value === winValue;
+    if (userId !== adminId) await updateLastChanceUse(userId, now);
+    if (isWin) {
+      await updatePoints(userId, prize);
+      await bot.sendMessage(userId, `تبریک! شانست گرفت و (${readable}) اومد و ${prize} امتیاز گرفتی!`);
+    } else {
+      await bot.sendMessage(userId, `متاسفانه شانست نگرفت 😞 دوباره فردا امتحان کن!`);
+    }
+    userState[userId] = null;
+    return;
+  }
 
   // ---- اسکواد: ثبت درخواست ----
   if (data === 'squad_request') {
@@ -293,9 +377,30 @@ bot.on('callback_query', async (query) => {
   }
   if (data === 'view_squads') {
     const approvedReqs = await getAllSquadReqs({ approved: true });
-    if (approvedReqs.length == 0)
-      return bot.sendMessage(userId, 'هیچ اسکواد فعالی وجود ندارد.');
-    showSquadCard(userId, approvedReqs, 0);
+    if (approvedReqs.length == 0) {
+      if (messageId) {
+        await bot.editMessageText('هیچ اسکواد فعالی وجود ندارد.', {
+          chat_id: userId,
+          message_id: messageId,
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
+            ]
+          }
+        });
+      } else {
+        await bot.sendMessage(userId, 'هیچ اسکواد فعالی وجود ندارد.', {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
+            ]
+          }
+        });
+      }
+      await bot.answerCallbackQuery(query.id);
+      return;
+    }
+    showSquadCard(userId, approvedReqs, 0, messageId);
     await bot.answerCallbackQuery(query.id);
     return;
   }
@@ -348,8 +453,51 @@ bot.on('callback_query', async (query) => {
   if (data.startsWith('squad_card_')) {
     const idx = parseInt(data.replace('squad_card_', ''));
     const reqs = await getAllSquadReqs({ approved: true });
-    showSquadCard(userId, reqs, idx);
+    showSquadCard(userId, reqs, idx, messageId);
     await bot.answerCallbackQuery(query.id);
+    return;
+  }
+
+  // ---- اسکواد: تایید یا لغو ثبت توسط کاربر ----
+  if (data === 'cancel_squad_req') {
+    userState[userId] = null;
+    await bot.answerCallbackQuery(query.id, { text: 'لغو شد.' });
+    return bot.sendMessage(userId, 'درخواست لغو شد.');
+  }
+  if (data === 'confirm_squad_req' && userState[userId] && userState[userId].squad_name) {
+    const state = userState[userId];
+    // ذخیره در دیتابیس
+    const reqRef = push(squadReqsRef);
+    const reqId = reqRef.key;
+    await set(reqRef, {
+      user_id: userId,
+      squad_name: state.squad_name,
+      roles_needed: state.roles_needed,
+      game_id: state.game_id,
+      min_rank: state.min_rank,
+      details: state.details,
+      created_at: Date.now(),
+      approved: false,
+      deleted: false
+    });
+    // کسر امتیاز
+    await updatePoints(userId, -5);
+    userState[userId] = null;
+    await bot.answerCallbackQuery(query.id, { text: 'درخواست ثبت شد.' });
+    bot.sendMessage(userId, '✅ درخواست شما با موفقیت ثبت شد و به صف بررسی مدیریت اضافه شد.');
+    bot.sendMessage(adminId,
+      `درخواست جدید اسکواد:\n\nاسکواد: ${state.squad_name}\nکاربر: ${userId}\nآیدی بازی: ${state.game_id}\nرنک: ${state.min_rank}\nنقش: ${state.roles_needed}\nتوضیحات: ${state.details}\n\n`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: 'تایید ✅', callback_data: `approve_squadreq_${reqId}` },
+              { text: 'حذف ❌', callback_data: `delete_squadreq_${reqId}` }
+            ]
+          ]
+        }
+      }
+    );
     return;
   }
 
@@ -674,6 +822,11 @@ bot.on('message', async (msg) => {
   }
   if (state.step === 'squad_roles') {
     state.roles_needed = text;
+    state.step = 'game_id';
+    return bot.sendMessage(userId, 'آیدی بازی خود را وارد کنید (مثال: 12345678 (1234)):');
+  }
+  if (state.step === 'game_id') {
+    state.game_id = text;
     state.step = 'min_rank';
     return bot.sendMessage(userId, 'حداقل رنک مورد نیاز؟');
   }
@@ -684,15 +837,13 @@ bot.on('message', async (msg) => {
   }
   if (state.step === 'details') {
     state.details = text;
-    // بررسی امتیاز
     if ((user.points || 0) < 5) {
       userState[userId] = null;
       return bot.sendMessage(userId, 'برای ثبت درخواست باید حداقل ۵ امتیاز داشته باشید.');
     }
-    // تایید ثبت
     userState[userId] = { step: 'confirm_squad_req', ...state };
     return bot.sendMessage(userId,
-      `درخواست شما:\n\nاسکواد: ${state.squad_name}\nنقش مورد نیاز: ${state.roles_needed}\nحداقل رنک: ${state.min_rank}\nتوضیحات: ${state.details}\n\nبا ثبت درخواست ۵ امتیاز از شما کسر می‌شود. تایید می‌کنید؟`,
+      `درخواست شما:\n\nاسکواد: ${state.squad_name}\nنقش مورد نیاز: ${state.roles_needed}\nآیدی بازی: ${state.game_id}\nحداقل رنک: ${state.min_rank}\nتوضیحات: ${state.details}\n\nبا ثبت درخواست ۵ امتیاز از شما کسر می‌شود. تایید می‌کنید؟`,
       {
         reply_markup: {
           inline_keyboard: [
@@ -705,74 +856,60 @@ bot.on('message', async (msg) => {
   }
 });
 
-// ---- تایید یا کنسل ثبت اسکواد توسط کاربر ----
-bot.on('callback_query', async (query) => {
-  const userId = query.from.id;
-  const data = query.data;
-  const state = userState[userId];
-
-  // لغو
-  if (data === 'cancel_squad_req') {
-    userState[userId] = null;
-    await bot.answerCallbackQuery(query.id, { text: 'لغو شد.' });
-    return bot.sendMessage(userId, 'درخواست لغو شد.');
-  }
-
-  // تایید
-  if (data === 'confirm_squad_req' && state && state.squad_name) {
-    // ذخیره در دیتابیس
-    const reqRef = push(squadReqsRef);
-    const reqId = reqRef.key;
-    await set(reqRef, {
-      user_id: userId,
-      squad_name: state.squad_name,
-      roles_needed: state.roles_needed,
-      min_rank: state.min_rank,
-      details: state.details,
-      created_at: Date.now(),
-      approved: false,
-      deleted: false
-    });
-    // کسر امتیاز
-    await updatePoints(userId, -5);
-    userState[userId] = null;
-    await bot.answerCallbackQuery(query.id, { text: 'درخواست ثبت شد.' });
-    bot.sendMessage(userId, '✅ درخواست شما با موفقیت ثبت شد و به صف بررسی مدیریت اضافه شد.');
-    // اطلاع به ادمین
-    bot.sendMessage(adminId,
-      `درخواست جدید اسکواد:\n\nاسکواد: ${state.squad_name}\nکاربر: ${userId}\nرنک: ${state.min_rank}\nنقش: ${state.roles_needed}\nتوضیحات: ${state.details}\n\n`,
-      {
+// ---- نمایش کارت اسکواد با ورق‌زنی (عمومی) ----
+async function showSquadCard(userId, reqs, idx, messageId) {
+  if (reqs.length === 0) {
+    if (messageId) {
+      return bot.editMessageText('هیچ اسکوادی وجود ندارد.', {
+        chat_id: userId,
+        message_id: messageId,
         reply_markup: {
           inline_keyboard: [
-            [
-              { text: 'تایید ✅', callback_data: `approve_squadreq_${reqId}` },
-              { text: 'حذف ❌', callback_data: `delete_squadreq_${reqId}` }
-            ]
+            [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
           ]
         }
-      }
-    );
-    return;
+      });
+    } else {
+      return bot.sendMessage(userId, 'هیچ اسکوادی وجود ندارد.', {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
+          ]
+        }
+      });
+    }
   }
-});
-
-// ---- نمایش کارت اسکواد با ورق‌زنی (عمومی) ----
-async function showSquadCard(userId, reqs, idx) {
-  if (reqs.length === 0)
-    return bot.sendMessage(userId, 'هیچ اسکوادی وجود ندارد.');
   if (idx < 0) idx = 0;
   if (idx >= reqs.length) idx = reqs.length - 1;
   const req = reqs[idx];
-  let txt = `🆔 اسکواد: ${req.squad_name}\nنقش مورد نیاز: ${req.roles_needed}\nرنک: ${req.min_rank}\nتوضیحات: ${req.details}\n`;
+  let txt = `🆔 اسکواد: ${req.squad_name}\nنقش مورد نیاز: ${req.roles_needed}\nآیدی بازی: ${req.game_id || '-'}\nرنک: ${req.min_rank}\nتوضیحات: ${req.details}\n`;
   txt += `\nدرخواست‌دهنده: ${req.user_id}`;
-  const buttons = [];
-  if (idx > 0) buttons.push({ text: '⬅️ قبلی', callback_data: `squad_card_${idx - 1}` });
-  if (idx < reqs.length - 1) buttons.push({ text: 'بعدی ➡️', callback_data: `squad_card_${idx + 1}` });
-  bot.sendMessage(userId, txt, {
-    reply_markup: {
-      inline_keyboard: [buttons.length ? buttons : []]
-    }
-  });
+  let buttons = [];
+  if (reqs.length > 1) {
+    buttons = [
+      { text: '⬅️', callback_data: `squad_card_${idx - 1}` },
+      { text: 'بازگشت 🔙', callback_data: 'main_menu' },
+      { text: '➡️', callback_data: `squad_card_${idx + 1}` }
+    ];
+  } else {
+    buttons = [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }];
+  }
+
+  if (messageId) {
+    bot.editMessageText(txt, {
+      chat_id: userId,
+      message_id: messageId,
+      reply_markup: {
+        inline_keyboard: [buttons]
+      }
+    });
+  } else {
+    bot.sendMessage(userId, txt, {
+      reply_markup: {
+        inline_keyboard: [buttons]
+      }
+    });
+  }
 }
 
 // ---- نمایش کارت اسکواد ادمین با ورق‌زنی و دکمه تایید/حذف ----
@@ -782,7 +919,7 @@ async function showAdminSquadCard(userId, reqs, idx) {
   if (idx < 0) idx = 0;
   if (idx >= reqs.length) idx = reqs.length - 1;
   const req = reqs[idx];
-  let txt = `🆔 اسکواد: ${req.squad_name}\nنقش مورد نیاز: ${req.roles_needed}\nرنک: ${req.min_rank}\nتوضیحات: ${req.details}\n`;
+  let txt = `🆔 اسکواد: ${req.squad_name}\nنقش مورد نیاز: ${req.roles_needed}\nآیدی بازی: ${req.game_id || '-'}\nرنک: ${req.min_rank}\nتوضیحات: ${req.details}\n`;
   txt += `\nدرخواست‌دهنده: ${req.user_id}`;
   const navBtns = [];
   if (idx > 0) navBtns.push({ text: '⬅️ قبلی', callback_data: `admin_squad_card_${idx - 1}` });
@@ -797,15 +934,6 @@ async function showAdminSquadCard(userId, reqs, idx) {
     }
   });
 }
-
-// ---- پشتیبانی ----
-bot.on('callback_query', async (query) => {
-  if (query.data === 'support') {
-    userState[query.from.id] = null;
-    await bot.answerCallbackQuery(query.id);
-    return bot.sendMessage(query.from.id, 'برای پشتیبانی پیام خود را ارسال کنید.');
-  }
-});
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
