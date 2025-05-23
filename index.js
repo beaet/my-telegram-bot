@@ -302,25 +302,27 @@ bot.onText(/\/panel/, async (msg) => {
           { text: '🔴 خاموش کردن ربات', callback_data: 'disable_bot' }
         ],
         [
-          { text: '➕ ساخت دکمه جدید', callback_data: 'add_dynamic_button' },
-          { text: '🗂 مدیریت دکمه‌ها', callback_data: 'manage_dynamic_buttons' }
-        ],
-        [
-          { text: '👥 جزییات کاربران', callback_data: 'users_list' }
-        ],
-        [
-          { text: '✉️ پیام دادن به کاربر خاص', callback_data: 'send_user_message' }
-        ]
+      { text: '➕ ساخت دکمه جدید', callback_data: 'add_dynamic_button' },
+        { text: '🗂 مدیریت دکمه‌ها', callback_data: 'manage_dynamic_buttons' }
+      ],
+      [
+        { text: '👥 جزییات کاربران', callback_data: 'users_list' }
+      ],
+      [
+        { text: '✉️ پیام دادن به کاربر خاص', callback_data: 'send_user_message' }
       ]
-    }
-  };
-}
+    ]
+  }
+};
 
 // ---- CALLBACK QUERIES ----
 bot.on('callback_query', async (query) => {
   const userId = query.from.id;
   const data = query.data;
   const messageId = query.message && query.message.message_id;
+
+  // ادامه...
+});
 
   // ---- Anti-Spam ----
   if (userId !== adminId) {
