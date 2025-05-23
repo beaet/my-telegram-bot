@@ -127,26 +127,6 @@ async function getAllSquadReqs(filter = {}) {
   return reqs.filter(r => !r.deleted);
 }
 
-// ---- Bot Enable/Disable ----
-const botEnabledRef = ref(db, 'settings/bot_enabled');
-async function getBotEnabled() {
-  const snap = await get(botEnabledRef);
-  return snap.exists() ? snap.val() : true;
-}
-async function setBotEnabled(val) {
-  await set(botEnabledRef, !!val);
-}
-
-// ---- Dynamic Buttons ----
-const dynamicButtonsRef = ref(db, 'settings/dynamic_buttons');
-async function getDynamicButtons() {
-  const snap = await get(dynamicButtonsRef);
-  return snap.exists() ? snap.val() : [];
-}
-async function setDynamicButtons(arr) {
-  await set(dynamicButtonsRef, arr);
-}
-
 // ---- Anti-Spam ----
 const buttonSpamMap = {}; // { userId: [timestamps] }
 const muteMap = {}; // { userId: muteUntilTimestamp }
@@ -174,12 +154,7 @@ app.post(`/bot${token}`, (req, res) => {
 });
 
 // ---- Main Menu ----
-async function mainMenuKeyboard() {
-  const dynamicBtns = await getDynamicButtons();
-  let dynamicRows = [];
-  if (dynamicBtns.length > 0) {
-    dynamicRows = dynamicBtns.map(btn => [{ text: btn.text, callback_data: btn.callback_data }]);
-  }
+function mainMenuKeyboard() {
   return {
     reply_markup: {
       inline_keyboard: [
@@ -210,19 +185,21 @@ async function mainMenuKeyboard() {
         [
           { text: '🍀 شانس', callback_data: 'chance' },
           { text: '🎁 کد هدیه', callback_data: 'gift_code' }
-        ],
-        ...dynamicRows
+        ]
       ]
     }
   };
 }
-async function sendMainMenu(userId, messageId = null) {
+function sendMainMenu(userId, messageId = null) {
   const text = 'سلام، به ربات محاسبه‌گر Mobile Legends خوش آمدید ✨';
-  const keyboard = await mainMenuKeyboard();
   if (messageId) {
-    bot.editMessageText(text, { chat_id: userId, message_id: messageId, ...keyboard });
+    bot.editMessageText(text, {
+      chat_id: userId,
+      message_id: messageId,
+      ...mainMenuKeyboard()
+    });
   } else {
-    bot.sendMessage(userId, text, keyboard);
+    bot.sendMessage(userId, text, mainMenuKeyboard());
   }
 }
 
@@ -236,9 +213,6 @@ bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
   if (user?.banned) {
     return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده از ربات را ندارید.');
   }
-  const isEnabled = await getBotEnabled();
-  if (!isEnabled && userId !== adminId)
-    return bot.sendMessage(userId, 'ربات موقتاً توسط مدیریت خاموش شده است.');
   if (refId && refId !== userId) {
     const refUser = await getUser(refId);
     if (refUser && !user.invited_by) {
@@ -258,62 +232,48 @@ bot.onText(/\/panel/, async (msg) => {
   if (userId !== adminId) {
     return bot.sendMessage(userId, 'شما دسترسی به پنل مدیریت ندارید.');
   }
-
-  await bot.sendMessage(userId, 'پنل مدیریت:', {
+  bot.sendMessage(userId, 'پنل مدیریت:', {
     reply_markup: {
       inline_keyboard: [
         [
-        { text: '➕ افزودن امتیاز', callback_data: 'add_points' },
-        { text: '➖ کسر امتیاز', callback_data: 'sub_points' }
-      ],
-      [
-        { text: '📢 پیام همگانی', callback_data: 'broadcast' }
-      ],
-      [
-        { text: '🚫بن کردن کاربر', callback_data: 'ban_user' },
-        { text: '☑️حذف بن کاربر', callback_data: 'unban_user' }
-      ],
-      [
-        { text: '🌐تغییر متن راهنما', callback_data: 'edit_help' }
-      ],
-      [
-        { text: '🎯 دادن امتیاز به همه', callback_data: 'add_points_all' },
-        { text: '↩️ بازگشت', callback_data: 'panel_back' }
-      ],
-      [
-        { text: '➕ افزودن کد هدیه', callback_data: 'add_gift_code' },
-        { text: '➖ حذف کد هدیه', callback_data: 'delete_gift_code' }
-      ],
-      [
-        { text: '🎁 ساخت کد هدیه همگانی', callback_data: 'add_global_gift_code' }
-      ],
-      [
-        { text: '📜 لیست همه کدها', callback_data: 'list_gift_codes' },
-        { text: '📊 آمار ربات', callback_data: 'bot_stats' }
-      ],
-      [
-        { text: '🔍 مدیریت اسکوادها', callback_data: 'admin_squad_list' }
-      ],
-      [
-        { text: '🗑 حذف اسکواد تاییدشده', callback_data: 'admin_delete_approved_squads' }
-      ],
-      [
-        { text: '🟢 روشن کردن ربات', callback_data: 'enable_bot' },
-        { text: '🔴 خاموش کردن ربات', callback_data: 'disable_bot' }
-      ],
-      [
-        { text: '➕ ساخت دکمه جدید', callback_data: 'add_dynamic_button' },
-        { text: '🗂 مدیریت دکمه‌ها', callback_data: 'manage_dynamic_buttons' }
-      ],
-      [
-        { text: '👥 جزییات کاربران', callback_data: 'users_list' }
-      ],
-      [
-        { text: '✉️ پیام دادن به کاربر خاص', callback_data: 'send_user_message' }
+          { text: '➕ افزودن امتیاز', callback_data: 'add_points' },
+          { text: '➖ کسر امتیاز', callback_data: 'sub_points' }
+        ],
+        [
+          { text: '📢 پیام همگانی', callback_data: 'broadcast' }
+        ],
+        [
+          { text: '🚫بن کردن کاربر', callback_data: 'ban_user' },
+          { text: '☑️حذف بن کاربر', callback_data: 'unban_user' }
+        ],
+        [
+          { text: '🌐تغییر متن راهنما', callback_data: 'edit_help' }
+        ],
+        [
+          { text: '🎯 دادن امتیاز به همه', callback_data: 'add_points_all' },
+          { text: '↩️ بازگشت', callback_data: 'panel_back' }
+        ],
+        [
+          { text: '➕ افزودن کد هدیه', callback_data: 'add_gift_code' },
+          { text: '➖ حذف کد هدیه', callback_data: 'delete_gift_code' }
+        ],
+        [
+          { text: '🎁 ساخت کد هدیه همگانی', callback_data: 'add_global_gift_code' }
+        ],
+        [
+          { text: '📜 لیست همه کدها', callback_data: 'list_gift_codes' },
+          { text: '📊 آمار ربات', callback_data: 'bot_stats' }
+        ],
+        [
+          { text: '🔍 مدیریت اسکوادها', callback_data: 'admin_squad_list' }
+        ],
+        [
+          { text: '🗑 حذف اسکواد تاییدشده', callback_data: 'admin_delete_approved_squads' }
+        ]
       ]
-    ]
-  }
-}); // این پرانتز بسته‌شده قبلاً جا افتاده بود
+    }
+  });
+});
 
 // ---- CALLBACK QUERIES ----
 bot.on('callback_query', async (query) => {
@@ -321,263 +281,151 @@ bot.on('callback_query', async (query) => {
   const data = query.data;
   const messageId = query.message && query.message.message_id;
 
-  try {
-    // ---- Anti-Spam ----
-    if (userId !== adminId && isMuted(userId)) {
-      await bot.answerCallbackQuery(query.id, {
-        text: '🚫 به دلیل اسپم کردن دکمه‌ها، تا پانزده دقیقه نمی‌توانید از ربات استفاده کنید.',
-        show_alert: true
-      });
+  // ---- Anti-Spam ----
+  if (userId !== adminId) {
+    if (isMuted(userId)) {
+      await bot.answerCallbackQuery(query.id, { text: '🚫 به دلیل اسپم کردن دکمه‌ها، تا پانزده دقیقه نمی‌توانید از ربات استفاده کنید.', show_alert: true });
       return;
     }
-
-    // ---- Main menu back ----
-    if (data === 'main_menu') {
-      await bot.answerCallbackQuery(query.id);
-      return sendMainMenu(userId, messageId);
+    if (!buttonSpamMap[userId]) buttonSpamMap[userId] = [];
+    const now = Date.now();
+    buttonSpamMap[userId] = buttonSpamMap[userId].filter(ts => now - ts < 8000);
+    buttonSpamMap[userId].push(now);
+    if (buttonSpamMap[userId].length > 8) {
+      muteMap[userId] = now + 15 * 60 * 1000; // 15 دقیقه میوت
+      buttonSpamMap[userId] = [];
+      await bot.answerCallbackQuery(query.id, { text: '🚫 به دلیل اسپم کردن دکمه‌ها، تا پانزده دقیقه نمی‌توانید از ربات استفاده کنید.', show_alert: true });
+      return;
     }
-
-    const user = await getUser(userId);
-    if (!user) {
-      return await bot.answerCallbackQuery(query.id, { text: 'خطا در دریافت اطلاعات کاربر.', show_alert: true });
-    }
-
-    if (user?.banned) {
-      return await bot.answerCallbackQuery(query.id, { text: 'شما بن شده‌اید و اجازه استفاده ندارید.', show_alert: true });
-    }
-    
-      if (data === 'enable_bot' && userId === adminId) {
-    await setBotEnabled(true);
-    await bot.answerCallbackQuery(query.id, { text: 'ربات روشن شد.' });
-    return bot.sendMessage(userId, 'ربات برای همه کاربران فعال شد.');
-  }
-  if (data === 'disable_bot' && userId === adminId) {
-    await setBotEnabled(false);
-    await bot.answerCallbackQuery(query.id, { text: 'ربات خاموش شد.' });
-    return bot.sendMessage(userId, 'ربات برای همه کاربران غیرفعال شد.');
   }
 
-    // ---- لیست پیک/بن ----
-    if (data === 'pickban_list') {
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId,
-        'جهت مشاهده لیست بیشترین پیک ریت و بن در این سیزن روی دکمه زیر کلیک کنید:',
-        {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: 'مشاهده در سایت رسمی', url: 'https://www.mobilelegends.com/rank' }],
-              [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
-            ]
-          }
+  // ---- Main menu back ----
+  if (data === 'main_menu') {
+    await bot.answerCallbackQuery(query.id);
+    sendMainMenu(userId, messageId);
+    return;
+  }
+
+  const user = await getUser(userId);
+  if (!user) return await bot.answerCallbackQuery(query.id, { text: 'خطا در دریافت اطلاعات کاربر.', show_alert: true });
+  if (user?.banned) return await bot.answerCallbackQuery(query.id, { text: 'شما بن شده‌اید و اجازه استفاده ندارید.', show_alert: true });
+
+  // ---- لیست پیک/بن ----
+  if (data === 'pickban_list') {
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId,
+      'جهت مشاهده لیست بیشترین پیک ریت و بن در این سیزن روی دکمه زیر کلیک کنید:',
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: 'مشاهده در سایت رسمی', url: 'https://www.mobilelegends.com/rank' }],
+            [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
+          ]
         }
-      );
-    }
-    
-      if (data === 'manage_dynamic_buttons' && userId === adminId) {
-    const buttons = await getDynamicButtons();
-    let msg = 'لیست دکمه‌های ساخته‌شده:\n\n';
-    if (buttons.length === 0) msg += 'هیچ دکمه‌ای ثبت نشده است.\n';
-    buttons.forEach((btn, i) => {
-      msg += `#${i + 1} - ${btn.text} (${btn.action === 'message' ? 'پیام' : 'اعلان'})\n`;
-    });
-    let keyboard = buttons.map((btn, i) =>
-      [{ text: btn.text, callback_data: `edit_dynbtn_${i}` }]
-    );
-    keyboard.push([{ text: '+ افزودن دکمه جدید', callback_data: 'add_dynamic_button' }]);
-    await bot.answerCallbackQuery(query.id);
-    return bot.sendMessage(userId, msg, { reply_markup: { inline_keyboard: keyboard } });
-  }
-  // ساخت دکمه پویا
-  if (data === 'add_dynamic_button' && userId === adminId) {
-    userState[userId] = { step: 'add_dynamic_button_name' };
-    await bot.answerCallbackQuery(query.id);
-    return bot.sendMessage(userId, 'اسم دکمه را وارد کنید:');
-  }
-  // پیام به کاربر خاص
-  if (data === 'send_user_message' && userId === adminId) {
-    userState[userId] = { step: 'enter_target_user_id_for_message' };
-    await bot.answerCallbackQuery(query.id);
-    return bot.sendMessage(userId, 'آیدی عددی کاربر مورد نظر را وارد کنید:');
-  }
-  // جزییات کاربران
-  if (data === 'users_list' && userId === adminId) {
-    const snap = await get(ref(db, 'users'));
-    const users = snap.exists() ? Object.values(snap.val()) : [];
-    let msg = 'لیست کاربران:\n\n';
-    let keyboard = [];
-    for (const u of users) {
-      const display = `${u.username ? `@${u.username} ` : ''}${u.user_id}`;
-      const url = u.username ? `https://t.me/${u.username}` : undefined;
-      if (url) {
-        keyboard.push([{ text: display, url }]);
-      } else {
-        keyboard.push([{ text: `${u.user_id}`, callback_data: `show_user_detail_${u.user_id}` }]);
       }
-    }
-    await bot.answerCallbackQuery(query.id);
-    return bot.sendMessage(userId, msg, { reply_markup: { inline_keyboard: keyboard } });
+    );
   }
-  if (data.startsWith('show_user_detail_') && userId === adminId) {
-    const uid = data.replace('show_user_detail_', '');
-    const u = await getUser(uid);
-    if (!u) return await bot.answerCallbackQuery(query.id, { text: 'کاربر یافت نشد', show_alert: true });
-    let info = `اطلاعات کاربر:\nآیدی: ${u.user_id}\nنام کاربری: ${u.username || '---'}\nامتیاز (سکه): ${u.points}\nتعداد دعوتی‌ها: ${u.invites}\nبن: ${u.banned ? 'بله' : 'خیر'}`;
+
+  // ---- بخش شانس ----
+  if (data === 'chance') {
     await bot.answerCallbackQuery(query.id);
-    return bot.sendMessage(userId, info, {
+    return bot.sendMessage(userId, '🍀 شانست رو انتخاب کن!\n\n🎲 اگر تاس بندازی و ۶ بیاد: ۲ امتیاز می‌گیری\n⚽ اگر پنالتی بزنی و گل بشه (GOAL): ۱ امتیاز می‌گیری\n🎯 اگر دارت بزنی و وسط هدف (BULLSEYE) بزنی: ۱ امتیاز می‌گیری\n\nیک گزینه رو انتخاب کن', {
       reply_markup: {
         inline_keyboard: [
-          ...(u.username ? [[{ text: `پیوی کاربر`, url: `https://t.me/${u.username}` }]] : []),
-          [{ text: 'بازگشت', callback_data: 'users_list' }]
+          [
+            { text: '🎲 تاس', callback_data: 'chance_dice' },
+            { text: '⚽ فوتبال', callback_data: 'chance_football' },
+            { text: '🎯 دارت', callback_data: 'chance_dart' }
+          ],
+          [
+            { text: 'بازگشت 🔙', callback_data: 'main_menu' }
+          ]
         ]
       }
     });
   }
-  // دکمه پویا (منطق پاسخ)
-  if (data.startsWith('dynbtn_')) {
-    const btns = await getDynamicButtons();
-    const btn = btns.find(b => b.callback_data === data);
-    if (btn) {
-      if (btn.action === 'message') {
-        await bot.sendMessage(userId, btn.message);
-      } else if (btn.action === 'alert') {
-        await bot.answerCallbackQuery(query.id, { text: btn.message, show_alert: true });
-      }
+  if (data === 'chance_dice' || data === 'chance_football' || data === 'chance_dart') {
+    const now = Date.now();
+    const lastUse = user.last_chance_use || 0;
+    if (userId !== adminId && now - lastUse < 24 * 60 * 60 * 1000) {
+      await bot.answerCallbackQuery(query.id, { text: 'تا ۲۴ ساعت آینده نمی‌تونی دوباره امتحان کنی.', show_alert: true });
       return;
     }
+    let emoji, winValue, prize, readable;
+    if (data === 'chance_dice') {
+      emoji = '🎲'; winValue = 6; prize = 2; readable = 'عدد ۶';
+    } else if (data === 'chance_football') {
+      emoji = '⚽'; winValue = 3; prize = 1; readable = 'GOAL';
+    } else if (data === 'chance_dart') {
+      emoji = '🎯'; winValue = 6; prize = 1; readable = 'BULLSEYE';
+    }
+    const diceMsg = await bot.sendDice(userId, { emoji });
+    let isWin = diceMsg.dice.value === winValue;
+    if (userId !== adminId) await updateLastChanceUse(userId, now);
+    if (isWin) {
+      await updatePoints(userId, prize);
+      await bot.sendMessage(userId, `تبریک! شانست گرفت و (${readable}) اومد و ${prize} امتیاز گرفتی!`);
+    } else {
+      await bot.sendMessage(userId, `متاسفانه شانست نگرفت 😞 دوباره فردا امتحان کن!`);
+    }
+    userState[userId] = null;
+    return;
   }
-  // نوع پاسخ دکمه پویا (از منوی انتخاب نوع)
-  const state = userState[userId];
-if (state && (data === 'add_dynbtn_type_message' || data === 'add_dynbtn_type_alert')) {
-  const btn = {
-    text: state.name,
-    callback_data: `dynbtn_${Date.now()}`,
-    action: data === 'add_dynbtn_type_message' ? 'message' : 'alert',
-    message: state.reply
-  };
-  const dynamicBtns = await getDynamicButtons();
-  dynamicBtns.push(btn);
-  await setDynamicButtons(dynamicBtns);
-  userState[userId] = null;
-  await bot.sendMessage(userId, 'دکمه جدید با موفقیت اضافه شد.');
-  return;
-}
 
-
-    // ---- بخش شانس ----
-    if (data === 'chance') {
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, '🍀 شانست رو انتخاب کن!\n\n🎲 اگر تاس بندازی و ۶ بیاد: ۲ امتیاز می‌گیری\n⚽ اگر پنالتی بزنی و گل بشه (GOAL): ۱ امتیاز می‌گیری\n🎯 اگر دارت بزنی و وسط هدف (BULLSEYE) بزنی: ۱ امتیاز می‌گیری\n\nیک گزینه رو انتخاب کن', {
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: '🎲 تاس', callback_data: 'chance_dice' },
-              { text: '⚽ فوتبال', callback_data: 'chance_football' },
-              { text: '🎯 دارت', callback_data: 'chance_dart' }
-            ],
-            [
-              { text: 'بازگشت 🔙', callback_data: 'main_menu' }
-            ]
-          ]
-        }
-      });
-    }
-
-    if (data === 'chance_dice' || data === 'chance_football' || data === 'chance_dart') {
-      const now = Date.now();
-      const lastUse = user.last_chance_use || 0;
-      if (userId !== adminId && now - lastUse < 24 * 60 * 60 * 1000) {
-        await bot.answerCallbackQuery(query.id, { text: 'تا ۲۴ ساعت آینده نمی‌تونی دوباره امتحان کنی.', show_alert: true });
-        return;
-      }
-
-      let emoji, winValue, prize, readable;
-      if (data === 'chance_dice') {
-        emoji = '🎲'; winValue = 6; prize = 2; readable = 'عدد ۶';
-      } else if (data === 'chance_football') {
-        emoji = '⚽'; winValue = 3; prize = 1; readable = 'GOAL';
-      } else if (data === 'chance_dart') {
-        emoji = '🎯'; winValue = 6; prize = 1; readable = 'BULLSEYE';
-      }
-
-      const diceMsg = await bot.sendDice(userId, { emoji });
-      let isWin = diceMsg.dice.value === winValue;
-      if (userId !== adminId) await updateLastChanceUse(userId, now);
-      if (isWin) {
-        await updatePoints(userId, prize);
-        await bot.sendMessage(userId, `تبریک! شانست گرفت و (${readable}) اومد و ${prize} امتیاز گرفتی!`);
-      } else {
-        await bot.sendMessage(userId, `متاسفانه شانست نگرفت 😞 دوباره فردا امتحان کن!`);
-      }
-      userState[userId] = null;
-      return;
-    }
-
-    // ---- اسکواد: ثبت درخواست ----
-    if (data === 'squad_request') {
-      userState[userId] = { step: 'squad_name' };
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'نام اسکواد خود را وارد کنید:');
-    }
-
-    if (data === 'view_squads') {
-      const approvedReqs = await getAllSquadReqs({ approved: true });
-      if (approvedReqs.length == 0) {
-        const opts = {
+  // ---- اسکواد: ثبت درخواست ----
+  if (data === 'squad_request') {
+    userState[userId] = { step: 'squad_name' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'نام اسکواد خود را وارد کنید:');
+  }
+  if (data === 'view_squads') {
+    const approvedReqs = await getAllSquadReqs({ approved: true });
+    if (approvedReqs.length == 0) {
+      if (messageId) {
+        await bot.editMessageText('هیچ اسکواد فعالی وجود ندارد.', {
+          chat_id: userId,
+          message_id: messageId,
           reply_markup: {
             inline_keyboard: [
               [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
             ]
           }
-        };
-        if (messageId) {
-          await bot.editMessageText('هیچ اسکواد فعالی وجود ندارد.', {
-            chat_id: userId,
-            message_id: messageId,
-            ...opts
-          });
-        } else {
-          await bot.sendMessage(userId, 'هیچ اسکواد فعالی وجود ندارد.', opts);
-        }
-        await bot.answerCallbackQuery(query.id);
-        return;
+        });
+      } else {
+        await bot.sendMessage(userId, 'هیچ اسکواد فعالی وجود ندارد.', {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
+            ]
+          }
+        });
       }
-      showSquadCard(userId, approvedReqs, 0, messageId);
       await bot.answerCallbackQuery(query.id);
       return;
     }
-
-    // ---- مدیریت اسکواد (ادمین) ----
-    if (data === 'admin_squad_list' && userId === adminId) {
-      const pendingReqs = await getAllSquadReqs({ approved: false });
-      if (!pendingReqs.length) {
-        await bot.answerCallbackQuery(query.id);
-        return bot.sendMessage(userId, 'درخواستی برای بررسی وجود ندارد.');
-      }
-      showAdminSquadCard(userId, pendingReqs, 0);
-      await bot.answerCallbackQuery(query.id);
-      return;
-    }
-
-    if (data.startsWith('admin_squad_card_') && userId === adminId) {
-      const idx = parseInt(data.replace('admin_squad_card_', ''));
-      const pendingReqs = await getAllSquadReqs({ approved: false });
-      showAdminSquadCard(userId, pendingReqs, idx);
-      await bot.answerCallbackQuery(query.id);
-      return;
-    }
-
-  } catch (error) {
-    console.error('خطا در callback_query:', error);
-    try {
-      await bot.answerCallbackQuery(query.id, {
-        text: 'خطای داخلی. لطفاً دوباره تلاش کنید.',
-        show_alert: true
-      });
-    } catch (e) {
-      console.error('خطا در پاسخ به callback:', e);
-    }
+    showSquadCard(userId, approvedReqs, 0, messageId);
+    await bot.answerCallbackQuery(query.id);
+    return;
   }
-});
+
+  // ---- مدیریت اسکواد: تایید نشده (ادمین) ----
+  if (data === 'admin_squad_list' && userId === adminId) {
+    const pendingReqs = await getAllSquadReqs({ approved: false });
+    if (!pendingReqs.length) {
+      await bot.answerCallbackQuery(query.id);
+      return bot.sendMessage(userId, 'درخواستی برای بررسی وجود ندارد.');
+    }
+    showAdminSquadCard(userId, pendingReqs, 0);
+    await bot.answerCallbackQuery(query.id);
+    return;
+  }
+  if (data.startsWith('admin_squad_card_') && userId === adminId) {
+    const idx = parseInt(data.replace('admin_squad_card_', ''));
+    const pendingReqs = await getAllSquadReqs({ approved: false });
+    showAdminSquadCard(userId, pendingReqs, idx);
+    await bot.answerCallbackQuery(query.id);
+    return;
+  }
 
   // ---- مدیریت اسکواد: حذف اسکواد تایید شده (ادمین) ----
   if (data === 'admin_delete_approved_squads' && userId === adminId) {
@@ -804,11 +652,6 @@ if (data.startsWith('delete_squadreq_') && userId === adminId) {
       break;
   }
 });
-
-  // ---- NEW FEATURES ----
-  // روشن/خاموش شدن ربات
-
-  // مدیریت دکمه‌های پویا
 
 // ---- اداره مراحل ثبت اسکواد ----
 // ... ناحیه message handler بدون تغییر، فقط بخش stateهای جدید اضافه شود
@@ -1142,58 +985,6 @@ let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: $
   });
 }
 
-bot.on('message', async (msg) => {
-  const userId = msg.from.id;
-  const text = msg.text || '';
-  // چک خاموشی ربات
-  if (userId !== adminId) {
-    const isEnabled = await getBotEnabled();
-    if (!isEnabled) return bot.sendMessage(userId, 'ربات موقتاً توسط مدیریت خاموش شده است.');
-  }
-  const state = userState[userId];
-  if (!state) return;
-  // ---- ساخت دکمه پویا ----
-  if (state.step === 'add_dynamic_button_name') {
-    state.name = text;
-    state.step = 'add_dynamic_button_reply';
-    return bot.sendMessage(userId, 'متن پاسخ دکمه را وارد کنید:');
-  }
-  if (state.step === 'add_dynamic_button_reply') {
-    state.reply = text;
-    state.step = 'add_dynamic_button_type';
-    return bot.sendMessage(userId, 'نوع پاسخ را انتخاب کن:', {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: 'پیام (SendMessage)', callback_data: 'add_dynbtn_type_message' }],
-          [{ text: 'اعلان (Alert)', callback_data: 'add_dynbtn_type_alert' }]
-        ]
-      }
-    });
-  }
-  // ---- پیام دادن به کاربر خاص ----
-  if (state.step === 'enter_target_user_id_for_message') {
-    if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفاً یک آیدی عددی معتبر وارد کنید.');
-    state.targetUserId = parseInt(text);
-    state.step = 'enter_message_to_send_user';
-    return bot.sendMessage(userId, 'متن پیام خود را وارد کنید:');
-  }
-  if (state.step === 'enter_message_to_send_user') {
-    const targetId = state.targetUserId;
-    const messageText = text;
-    userState[userId] = null;
-    try {
-      await bot.sendMessage(targetId, `پیام از طرف مدیریت/پشتیبانی:\n${messageText}`);
-      await bot.sendMessage(userId, '✅ پیام شما برای کاربر ارسال شد.');
-    } catch (e) {
-      await bot.sendMessage(userId, '❌ ارسال پیام با خطا مواجه شد. احتمالاً کاربر ربات را استارت نکرده است.');
-    }
-    return;
-  }
-  // ---- ORIGINAL PANEL BUTTON LOGIC HANDLERS (examples) ----
-  // (other admin panel features, calculations, etc, as in your original code)
-  // ... your original message state logic for add_points, sub_points, etc goes here ...
-});
-
 // ---- نمایش کارت اسکواد تایید شده برای حذف توسط ادمین ----
 async function showAdminApprovedSquadCard(userId, reqs, idx) {
   if (reqs.length === 0)
@@ -1218,4 +1009,4 @@ let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: $
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
-}); 
+});
