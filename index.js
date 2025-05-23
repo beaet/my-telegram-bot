@@ -325,20 +325,14 @@ bot.on('callback_query', async (query) => {
   // ---- Anti-Spam ----
   if (userId !== adminId) {
     if (isMuted(userId)) {
-      await bot.answerCallbackQuery(query.id, { text: '🚫 به دلیل اسپم کردن دکمه‌ها، تا پانزده دقیقه نمی‌توانید از ربات استفاده کنید.', show_alert: true });
-      return;
-    }
-    if (!buttonSpamMap[userId]) buttonSpamMap[userId] = [];
-    const now = Date.now();
-    buttonSpamMap[userId] = buttonSpamMap[userId].filter(ts => now - ts < 8000);
-    buttonSpamMap[userId].push(now);
-    if (buttonSpamMap[userId].length > 8) {
-      muteMap[userId] = now + 15 * 60 * 1000; // 15 دقیقه میوت
-      buttonSpamMap[userId] = [];
-      await bot.answerCallbackQuery(query.id, { text: '🚫 به دلیل اسپم کردن دکمه‌ها، تا پانزده دقیقه نمی‌توانید از ربات استفاده کنید.', show_alert: true });
+      await bot.answerCallbackQuery(query.id, {
+        text: '🚫 به دلیل اسپم کردن دکمه‌ها، تا پانزده دقیقه نمی‌توانید از ربات استفاده کنید.',
+        show_alert: true
+      });
       return;
     }
   }
+
 
   // ---- Main menu back ----
   if (data === 'main_menu') {
