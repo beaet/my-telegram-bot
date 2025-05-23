@@ -320,40 +320,32 @@ bot.on('callback_query', async (query) => {
   const data = query.data;
   const messageId = query.message && query.message.message_id;
 
-  // ادامه...
-});
-
-  // ---- Anti-Spam ----
-  if (userId !== adminId) {
-    if (isMuted(userId)) {
-      await bot.answerCallbackQuery(query.id, {
-        text: '🚫 به دلیل اسپم کردن دکمه‌ها، تا پانزده دقیقه نمی‌توانید از ربات استفاده کنید.',
-        show_alert: true
-      });
-      return;
+  try {
+    // ---- Anti-Spam ----
+    if (userId !== adminId) {
+      if (isMuted(userId)) {
+        await bot.answerCallbackQuery(query.id, {
+          text: '🚫 به دلیل اسپم کردن دکمه‌ها، تا پانزده دقیقه نمی‌توانید از ربات استفاده کنید.',
+          show_alert: true
+        });
+        return;
+      }
     }
-  }
 
-
-  // ---- Main menu back ----
-  if (data === 'main_menu') {
-    await bot.answerCallbackQuery(query.id);
-    sendMainMenu(userId, messageId);
-    return;
-  }
-
-  const user = await getUser(userId);
-  if (!user) return await bot.answerCallbackQuery(query.id, { text: 'خطا در دریافت اطلاعات کاربر.', show_alert: true });
-  if (user?.banned) return await bot.answerCallbackQuery(query.id, { text: 'شما بن شده‌اید و اجازه استفاده ندارید.', show_alert: true });
-
+    // ---- Main menu back ----
     if (data === 'main_menu') {
       await bot.answerCallbackQuery(query.id);
-      if (typeof sendMainMenu === 'function') {
-        sendMainMenu(userId, messageId);
-      } else {
-        bot.sendMessage(chatId, 'منوی اصلی در دسترس نیست.');
-      }
+      sendMainMenu(userId, messageId);
       return;
+    }
+
+    const user = await getUser(userId);
+    if (!user) {
+      return await bot.answerCallbackQuery(query.id, { text: 'خطا در دریافت اطلاعات کاربر.', show_alert: true });
+    }
+
+    if (user?.banned) {
+      return await bot.answerCallbackQuery(query.id, { text: 'شما بن شده‌اید و اجازه استفاده ندارید.', show_alert: true });
     }
 
     // سایر دستورات مربوط به callback ها را می‌توان اینجا اضافه کرد...
