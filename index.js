@@ -322,8 +322,15 @@ bot.onText(/\/panel/, async (msg) => {
   // ---- Main menu back ----
 bot.on('callback_query', async (query) => {
   const userId = query.from.id;
-  const data = query.data;
-  const messageId = query.message && query.message.message_id;
+  const user = await getUser(userId);
+
+  if (!user)
+    return await bot.answerCallbackQuery(query.id, { text: 'خطا در دریافت اطلاعات کاربر.', show_alert: true });
+  if (user?.banned)
+    return await bot.answerCallbackQuery(query.id, { text: 'شما بن شده‌اید و اجازه استفاده ندارید.', show_alert: true });
+
+  // ادامه منطق...
+});
 
   // گرفتن اطلاعات کاربر
   const user = await getUser(userId);
