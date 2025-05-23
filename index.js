@@ -326,14 +326,12 @@ bot.on('callback_query', async (query) => {
   const messageId = query.message && query.message.message_id;
 
   if (data === 'main_menu') {
+    await bot.answerCallbackQuery(query.id);
     sendMainMenu(userId, messageId);
     return;
   }
 
   // ... سایر منطق‌ها ...
-});
-
-  // ... همه ifهای دیگر ...
 });
 
   const user = await getUser(userId);
