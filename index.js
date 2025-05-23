@@ -344,6 +344,17 @@ bot.on('callback_query', async (query) => {
     if (user?.banned) {
       return await bot.answerCallbackQuery(query.id, { text: 'شما بن شده‌اید و اجازه استفاده ندارید.', show_alert: true });
     }
+    
+      if (data === 'enable_bot' && userId === adminId) {
+    await setBotEnabled(true);
+    await bot.answerCallbackQuery(query.id, { text: 'ربات روشن شد.' });
+    return bot.sendMessage(userId, 'ربات برای همه کاربران فعال شد.');
+  }
+  if (data === 'disable_bot' && userId === adminId) {
+    await setBotEnabled(false);
+    await bot.answerCallbackQuery(query.id, { text: 'ربات خاموش شد.' });
+    return bot.sendMessage(userId, 'ربات برای همه کاربران غیرفعال شد.');
+  }
 
     // ---- لیست پیک/بن ----
     if (data === 'pickban_list') {
@@ -705,16 +716,7 @@ if (data.startsWith('delete_squadreq_') && userId === adminId) {
 
   // ---- NEW FEATURES ----
   // روشن/خاموش شدن ربات
-  if (data === 'enable_bot' && userId === adminId) {
-    await setBotEnabled(true);
-    await bot.answerCallbackQuery(query.id, { text: 'ربات روشن شد.' });
-    return bot.sendMessage(userId, 'ربات برای همه کاربران فعال شد.');
-  }
-  if (data === 'disable_bot' && userId === adminId) {
-    await setBotEnabled(false);
-    await bot.answerCallbackQuery(query.id, { text: 'ربات خاموش شد.' });
-    return bot.sendMessage(userId, 'ربات برای همه کاربران غیرفعال شد.');
-  }
+
   // مدیریت دکمه‌های پویا
   if (data === 'manage_dynamic_buttons' && userId === adminId) {
     const buttons = await getDynamicButtons();
