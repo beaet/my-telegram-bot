@@ -463,23 +463,22 @@ bot.on('callback_query', async (query) => {
       deleted: false
     });
     
-      if (!botActive && userId !== adminId) {
-    await bot.answerCallbackQuery(query.id, { text: 'ربات موقتاً خاموش است.', show_alert: true });
-    return;
+
+  if (!botActive && userId !== adminId) {
+    return bot.sendMessage(userId, 'ربات موقتاً خاموش است.');
+  }
   }
   // ... ادامه
   if (data === 'deactivate_bot' && userId === adminId) {
-    botActive = false;
-    await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی خاموش شد.' });
-    // ... پنل را آپدیت کن
-    return;
-  }
-  if (data === 'activate_bot' && userId === adminId) {
-    botActive = true;
-    await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی روشن شد.' });
-    // ... پنل را آپدیت کن
-    return;
-  }
+  botActive = false;
+  await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی خاموش شد.' });
+  return;
+}
+if (data === 'activate_bot' && userId === adminId) {
+  botActive = true;
+  await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی روشن شد.' });
+  return;
+}
   // ... ادامه سوییچ
 
   // ---- مدیریت اسکواد: تایید نشده (ادمین) ----
@@ -543,8 +542,7 @@ bot.on('callback_query', async (query) => {
     return;
   }
 
-  if (!botActive && userId !== adminId) {
-    await bot.answerCallbackQuery(query.id, { text: 'ربات موقتاً خاموش است.', show_alert: true });
+  bot.answerCallbackQuery(query.id, { text: 'ربات موقتاً خاموش است.', show_alert: true });
     return;
   }
   // ... ادامه
