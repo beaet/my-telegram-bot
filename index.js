@@ -504,7 +504,10 @@ bot.on('callback_query', async (query) => {
 
   // ---- اسکواد: حذف فقط توسط ادمین ----
 if (data.startsWith('delete_squadreq_') && userId === adminId) {
-  const reqId = data.replace('delete_squadreq_', '');
+  (async () => {
+    const req = await getSquadReq(reqId);
+    // ... بقیه کدها
+  })();
   const req = await getSquadReq(reqId);
   if (!req || req.deleted)
     return bot.answerCallbackQuery(query.id, { text: 'درخواست پیدا نشد یا قبلا حذف شده.', show_alert: true });
