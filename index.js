@@ -446,21 +446,20 @@ bot.on('callback_query', async (query) => {
   }
   // نوع پاسخ دکمه پویا (از منوی انتخاب نوع)
   const state = userState[userId];
-  if (state && (data === 'add_dynbtn_type_message' || data === 'add_dynbtn_type_alert')) {
-    const btn = {
-      text: state.name,
-      callback_data: `dynbtn_${Date.now()}`,
-      action: data === 'add_dynbtn_type_message' ? 'message' : 'alert',
-      message: state.reply
-    };
-    const dynamicBtns = await getDynamicButtons();
-    dynamicBtns.push(btn);
-    await setDynamicButtons(dynamicBtns);
-    userState[userId] = null;
-    await bot.sendMessage(userId, 'دکمه جدید با موفقیت اضافه شد.');
-    return;
-  }
-});
+if (state && (data === 'add_dynbtn_type_message' || data === 'add_dynbtn_type_alert')) {
+  const btn = {
+    text: state.name,
+    callback_data: `dynbtn_${Date.now()}`,
+    action: data === 'add_dynbtn_type_message' ? 'message' : 'alert',
+    message: state.reply
+  };
+  const dynamicBtns = await getDynamicButtons();
+  dynamicBtns.push(btn);
+  await setDynamicButtons(dynamicBtns);
+  userState[userId] = null;
+  await bot.sendMessage(userId, 'دکمه جدید با موفقیت اضافه شد.');
+  return;
+}
 
 
     // ---- بخش شانس ----
