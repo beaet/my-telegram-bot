@@ -253,8 +253,12 @@ bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
 });
 
 // ---- Panel for admin ----
-function adminPanelKeyboard() {
-  return {
+bot.onText(/\/panel/, async (msg) => {
+  const userId = msg.from.id;
+  if (userId !== adminId) {
+    return bot.sendMessage(userId, 'شما دسترسی به پنل مدیریت ندارید.');
+  }
+  bot.sendMessage(userId, 'پنل مدیریت:', {
     reply_markup: {
       inline_keyboard: [
         [
@@ -311,31 +315,66 @@ function adminPanelKeyboard() {
     }
   };
 }
-bot.onText(/\/panel/, async (msg) => {
-  const userId = msg.from.id;
-  if (userId !== adminId) {
-    return bot.sendMessage(userId, 'شما دسترسی به پنل مدیریت ندارید.');
-  }
-  bot.sendMessage(userId, 'پنل مدیریت:', adminPanelKeyboard());
-});
 
+// ---- CALLBACK QUERIES ----
 bot.on('callback_query', async (query) => {
   const userId = query.from.id;
   const data = query.data;
   const messageId = query.message && query.message.message_id;
-  const user = await getUser(userId);
 
-  if (!user)
-    return await bot.answerCallbackQuery(query.id, { text: 'خطا در دریافت اطلاعات کاربر.', show_alert: true });
+  // ---- Anti-Spam ----
+  if (userId !== adminId) {
+    if (isMuted(userId)) {
+      await bot.answerCallbackQuery(query.id, { text: '🚫 به دلیل اسپم کردن دکمه‌ها، تا پانزده دقیقه نمی‌توانید از ربات استفاده کنید.', show_alert: true });
+      return;
+    }
+    if (!buttonSpamMap[userId]) buttonSpamMap[userId] = [];
+    const now = Date.now();
+    buttonSpamMap[userId] = buttonSpamMap[userId].filter(ts => now - ts < 8000);
+    buttonSpamMap[userId].push(now);
+    if (buttonSpamMap[userId].length > 8) {
+      muteMap[userId] = now + 15 * 60 * 1000; // 15 دقیقه میوت
+      buttonSpamMap[userId] = [];
+      await bot.answerCallbackQuery(query.id, { text: '🚫 به دلیل اسپم کردن دکمه‌ها، تا پانزده دقیقه نمی‌توانید از ربات استفاده کنید.', show_alert: true });
+      return;
+    }
+  }
 
-  if (user?.banned)
-    return await bot.answerCallbackQuery(query.id, { text: 'شما بن شده‌اید و اجازه استفاده ندارید.', show_alert: true });
-
+  // ---- Main menu back ----
   if (data === 'main_menu') {
     await bot.answerCallbackQuery(query.id);
     sendMainMenu(userId, messageId);
     return;
   }
+
+  const user = await getUser(userId);
+  if (!user) return await bot.answerCallbackQuery(query.id, { text: 'خطا در دریافت اطلاعات کاربر.', show_alert: true });
+  if (user?.banned) return await bot.answerCallbackQuery(query.id, { text: 'شما بن شده‌اید و اجازه استفاده ندارید.', show_alert: true });
+
+    if (data === 'main_menu') {
+      await bot.answerCallbackQuery(query.id);
+      if (typeof sendMainMenu === 'function') {
+        sendMainMenu(userId, messageId);
+      } else {
+        bot.sendMessage(chatId, 'منوی اصلی در دسترس نیست.');
+      }
+      return;
+    }
+
+    // سایر دستورات مربوط به callback ها را می‌توان اینجا اضافه کرد...
+
+  } catch (error) {
+    console.error('خطا در callback_query:', error);
+    try {
+      await bot.answerCallbackQuery(query.id, {
+        text: 'خطای داخلی. لطفاً دوباره تلاش کنید.',
+        show_alert: true
+      });
+    } catch (e) {
+      console.error('خطا در پاسخ به callback:', e);
+    }
+  }
+});
 
   // ---- لیست پیک/بن ----
   if (data === 'pickban_list') {
