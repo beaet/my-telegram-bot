@@ -127,6 +127,26 @@ async function getAllSquadReqs(filter = {}) {
   return reqs.filter(r => !r.deleted);
 }
 
+// ---- Bot Enable/Disable ----
+const botEnabledRef = ref(db, 'settings/bot_enabled');
+async function getBotEnabled() {
+  const snap = await get(botEnabledRef);
+  return snap.exists() ? snap.val() : true;
+}
+async function setBotEnabled(val) {
+  await set(botEnabledRef, !!val);
+}
+
+// ---- Dynamic Buttons ----
+const dynamicButtonsRef = ref(db, 'settings/dynamic_buttons');
+async function getDynamicButtons() {
+  const snap = await get(dynamicButtonsRef);
+  return snap.exists() ? snap.val() : [];
+}
+async function setDynamicButtons(arr) {
+  await set(dynamicButtonsRef, arr);
+}
+
 // ---- Anti-Spam ----
 const buttonSpamMap = {}; // { userId: [timestamps] }
 const muteMap = {}; // { userId: muteUntilTimestamp }
@@ -154,7 +174,12 @@ app.post(`/bot${token}`, (req, res) => {
 });
 
 // ---- Main Menu ----
-function mainMenuKeyboard() {
+async function mainMenuKeyboard() {
+  const dynamicBtns = await getDynamicButtons();
+  let dynamicRows = [];
+  if (dynamicBtns.length > 0) {
+    dynamicRows = dynamicBtns.map(btn => [{ text: btn.text, callback_data: btn.callback_data }]);
+  }
   return {
     reply_markup: {
       inline_keyboard: [
@@ -185,21 +210,19 @@ function mainMenuKeyboard() {
         [
           { text: '🍀 شانس', callback_data: 'chance' },
           { text: '🎁 کد هدیه', callback_data: 'gift_code' }
-        ]
+        ],
+        ...dynamicRows
       ]
     }
   };
 }
-function sendMainMenu(userId, messageId = null) {
+async function sendMainMenu(userId, messageId = null) {
   const text = 'سلام، به ربات محاسبه‌گر Mobile Legends خوش آمدید ✨';
+  const keyboard = await mainMenuKeyboard();
   if (messageId) {
-    bot.editMessageText(text, {
-      chat_id: userId,
-      message_id: messageId,
-      ...mainMenuKeyboard()
-    });
+    bot.editMessageText(text, { chat_id: userId, message_id: messageId, ...keyboard });
   } else {
-    bot.sendMessage(userId, text, mainMenuKeyboard());
+    bot.sendMessage(userId, text, keyboard);
   }
 }
 
@@ -213,6 +236,9 @@ bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
   if (user?.banned) {
     return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده از ربات را ندارید.');
   }
+  const isEnabled = await getBotEnabled();
+  if (!isEnabled && userId !== adminId)
+    return bot.sendMessage(userId, 'ربات موقتاً توسط مدیریت خاموش شده است.');
   if (refId && refId !== userId) {
     const refUser = await getUser(refId);
     if (refUser && !user.invited_by) {
@@ -227,12 +253,8 @@ bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
 });
 
 // ---- Panel for admin ----
-bot.onText(/\/panel/, async (msg) => {
-  const userId = msg.from.id;
-  if (userId !== adminId) {
-    return bot.sendMessage(userId, 'شما دسترسی به پنل مدیریت ندارید.');
-  }
-  bot.sendMessage(userId, 'پنل مدیریت:', {
+function adminPanelKeyboard() {
+  return {
     reply_markup: {
       inline_keyboard: [
         [
@@ -269,35 +291,33 @@ bot.onText(/\/panel/, async (msg) => {
         ],
         [
           { text: '🗑 حذف اسکواد تاییدشده', callback_data: 'admin_delete_approved_squads' }
+        ],
+        // --- New features below ---
+        [
+          { text: '🟢 روشن کردن ربات', callback_data: 'enable_bot' },
+          { text: '🔴 خاموش کردن ربات', callback_data: 'disable_bot' }
+        ],
+        [
+          { text: '➕ ساخت دکمه جدید', callback_data: 'add_dynamic_button' },
+          { text: '🗂 مدیریت دکمه‌ها', callback_data: 'manage_dynamic_buttons' }
+        ],
+        [
+          { text: '👥 جزییات کاربران', callback_data: 'users_list' }
+        ],
+        [
+          { text: '✉️ پیام دادن به کاربر خاص', callback_data: 'send_user_message' }
         ]
       ]
     }
-  });
-});
-
-// ---- CALLBACK QUERIES ----
-bot.on('callback_query', async (query) => {
-  const userId = query.from.id;
-  const data = query.data;
-  const messageId = query.message && query.message.message_id;
-
-  // ---- Anti-Spam ----
+  };
+}
+bot.onText(/\/panel/, async (msg) => {
+  const userId = msg.from.id;
   if (userId !== adminId) {
-    if (isMuted(userId)) {
-      await bot.answerCallbackQuery(query.id, { text: '🚫 به دلیل اسپم کردن دکمه‌ها، تا پانزده دقیقه نمی‌توانید از ربات استفاده کنید.', show_alert: true });
-      return;
-    }
-    if (!buttonSpamMap[userId]) buttonSpamMap[userId] = [];
-    const now = Date.now();
-    buttonSpamMap[userId] = buttonSpamMap[userId].filter(ts => now - ts < 8000);
-    buttonSpamMap[userId].push(now);
-    if (buttonSpamMap[userId].length > 8) {
-      muteMap[userId] = now + 15 * 60 * 1000; // 15 دقیقه میوت
-      buttonSpamMap[userId] = [];
-      await bot.answerCallbackQuery(query.id, { text: '🚫 به دلیل اسپم کردن دکمه‌ها، تا پانزده دقیقه نمی‌توانید از ربات استفاده کنید.', show_alert: true });
-      return;
-    }
+    return bot.sendMessage(userId, 'شما دسترسی به پنل مدیریت ندارید.');
   }
+  bot.sendMessage(userId, 'پنل مدیریت:', adminPanelKeyboard());
+});
 
   // ---- Main menu back ----
   if (data === 'main_menu') {
@@ -653,6 +673,109 @@ if (data.startsWith('delete_squadreq_') && userId === adminId) {
   }
 });
 
+  // ---- NEW FEATURES ----
+  // روشن/خاموش شدن ربات
+  if (data === 'enable_bot' && userId === adminId) {
+    await setBotEnabled(true);
+    await bot.answerCallbackQuery(query.id, { text: 'ربات روشن شد.' });
+    return bot.sendMessage(userId, 'ربات برای همه کاربران فعال شد.');
+  }
+  if (data === 'disable_bot' && userId === adminId) {
+    await setBotEnabled(false);
+    await bot.answerCallbackQuery(query.id, { text: 'ربات خاموش شد.' });
+    return bot.sendMessage(userId, 'ربات برای همه کاربران غیرفعال شد.');
+  }
+  // مدیریت دکمه‌های پویا
+  if (data === 'manage_dynamic_buttons' && userId === adminId) {
+    const buttons = await getDynamicButtons();
+    let msg = 'لیست دکمه‌های ساخته‌شده:\n\n';
+    if (buttons.length === 0) msg += 'هیچ دکمه‌ای ثبت نشده است.\n';
+    buttons.forEach((btn, i) => {
+      msg += `#${i + 1} - ${btn.text} (${btn.action === 'message' ? 'پیام' : 'اعلان'})\n`;
+    });
+    let keyboard = buttons.map((btn, i) =>
+      [{ text: btn.text, callback_data: `edit_dynbtn_${i}` }]
+    );
+    keyboard.push([{ text: '+ افزودن دکمه جدید', callback_data: 'add_dynamic_button' }]);
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, msg, { reply_markup: { inline_keyboard: keyboard } });
+  }
+  // ساخت دکمه پویا
+  if (data === 'add_dynamic_button' && userId === adminId) {
+    userState[userId] = { step: 'add_dynamic_button_name' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'اسم دکمه را وارد کنید:');
+  }
+  // پیام به کاربر خاص
+  if (data === 'send_user_message' && userId === adminId) {
+    userState[userId] = { step: 'enter_target_user_id_for_message' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'آیدی عددی کاربر مورد نظر را وارد کنید:');
+  }
+  // جزییات کاربران
+  if (data === 'users_list' && userId === adminId) {
+    const snap = await get(ref(db, 'users'));
+    const users = snap.exists() ? Object.values(snap.val()) : [];
+    let msg = 'لیست کاربران:\n\n';
+    let keyboard = [];
+    for (const u of users) {
+      const display = `${u.username ? `@${u.username} ` : ''}${u.user_id}`;
+      const url = u.username ? `https://t.me/${u.username}` : undefined;
+      if (url) {
+        keyboard.push([{ text: display, url }]);
+      } else {
+        keyboard.push([{ text: `${u.user_id}`, callback_data: `show_user_detail_${u.user_id}` }]);
+      }
+    }
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, msg, { reply_markup: { inline_keyboard: keyboard } });
+  }
+  if (data.startsWith('show_user_detail_') && userId === adminId) {
+    const uid = data.replace('show_user_detail_', '');
+    const u = await getUser(uid);
+    if (!u) return await bot.answerCallbackQuery(query.id, { text: 'کاربر یافت نشد', show_alert: true });
+    let info = `اطلاعات کاربر:\nآیدی: ${u.user_id}\nنام کاربری: ${u.username || '---'}\nامتیاز (سکه): ${u.points}\nتعداد دعوتی‌ها: ${u.invites}\nبن: ${u.banned ? 'بله' : 'خیر'}`;
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, info, {
+      reply_markup: {
+        inline_keyboard: [
+          ...(u.username ? [[{ text: `پیوی کاربر`, url: `https://t.me/${u.username}` }]] : []),
+          [{ text: 'بازگشت', callback_data: 'users_list' }]
+        ]
+      }
+    });
+  }
+  // دکمه پویا (منطق پاسخ)
+  if (data.startsWith('dynbtn_')) {
+    const btns = await getDynamicButtons();
+    const btn = btns.find(b => b.callback_data === data);
+    if (btn) {
+      if (btn.action === 'message') {
+        await bot.sendMessage(userId, btn.message);
+      } else if (btn.action === 'alert') {
+        await bot.answerCallbackQuery(query.id, { text: btn.message, show_alert: true });
+      }
+      return;
+    }
+  }
+  // نوع پاسخ دکمه پویا (از منوی انتخاب نوع)
+  const state = userState[userId];
+  if (state && (data === 'add_dynbtn_type_message' || data === 'add_dynbtn_type_alert')) {
+    const btn = {
+      text: state.name,
+      callback_data: `dynbtn_${Date.now()}`,
+      action: data === 'add_dynbtn_type_message' ? 'message' : 'alert',
+      message: state.reply
+    };
+    const dynamicBtns = await getDynamicButtons();
+    dynamicBtns.push(btn);
+    await setDynamicButtons(dynamicBtns);
+    userState[userId] = null;
+    await bot.sendMessage(userId, 'دکمه جدید با موفقیت اضافه شد.');
+    return;
+  }
+});
+
 // ---- اداره مراحل ثبت اسکواد ----
 // ... ناحیه message handler بدون تغییر، فقط بخش stateهای جدید اضافه شود
 bot.on('message', async (msg) => {
@@ -985,6 +1108,58 @@ let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: $
   });
 }
 
+bot.on('message', async (msg) => {
+  const userId = msg.from.id;
+  const text = msg.text || '';
+  // چک خاموشی ربات
+  if (userId !== adminId) {
+    const isEnabled = await getBotEnabled();
+    if (!isEnabled) return bot.sendMessage(userId, 'ربات موقتاً توسط مدیریت خاموش شده است.');
+  }
+  const state = userState[userId];
+  if (!state) return;
+  // ---- ساخت دکمه پویا ----
+  if (state.step === 'add_dynamic_button_name') {
+    state.name = text;
+    state.step = 'add_dynamic_button_reply';
+    return bot.sendMessage(userId, 'متن پاسخ دکمه را وارد کنید:');
+  }
+  if (state.step === 'add_dynamic_button_reply') {
+    state.reply = text;
+    state.step = 'add_dynamic_button_type';
+    return bot.sendMessage(userId, 'نوع پاسخ را انتخاب کن:', {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'پیام (SendMessage)', callback_data: 'add_dynbtn_type_message' }],
+          [{ text: 'اعلان (Alert)', callback_data: 'add_dynbtn_type_alert' }]
+        ]
+      }
+    });
+  }
+  // ---- پیام دادن به کاربر خاص ----
+  if (state.step === 'enter_target_user_id_for_message') {
+    if (!/^\d+$/.test(text)) return bot.sendMessage(userId, 'لطفاً یک آیدی عددی معتبر وارد کنید.');
+    state.targetUserId = parseInt(text);
+    state.step = 'enter_message_to_send_user';
+    return bot.sendMessage(userId, 'متن پیام خود را وارد کنید:');
+  }
+  if (state.step === 'enter_message_to_send_user') {
+    const targetId = state.targetUserId;
+    const messageText = text;
+    userState[userId] = null;
+    try {
+      await bot.sendMessage(targetId, `پیام از طرف مدیریت/پشتیبانی:\n${messageText}`);
+      await bot.sendMessage(userId, '✅ پیام شما برای کاربر ارسال شد.');
+    } catch (e) {
+      await bot.sendMessage(userId, '❌ ارسال پیام با خطا مواجه شد. احتمالاً کاربر ربات را استارت نکرده است.');
+    }
+    return;
+  }
+  // ---- ORIGINAL PANEL BUTTON LOGIC HANDLERS (examples) ----
+  // (other admin panel features, calculations, etc, as in your original code)
+  // ... your original message state logic for add_points, sub_points, etc goes here ...
+});
+
 // ---- نمایش کارت اسکواد تایید شده برای حذف توسط ادمین ----
 async function showAdminApprovedSquadCard(userId, reqs, idx) {
   if (reqs.length === 0)
@@ -1009,4 +1184,4 @@ let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: $
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
-});
+}); و 
