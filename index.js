@@ -10,6 +10,7 @@ const token = process.env.BOT_TOKEN;
 const adminId = Number(process.env.ADMIN_ID);
 const webhookUrl = process.env.WEBHOOK_URL;
 const port = process.env.PORT || 10000;
+let botActive = true;
 
 // ---- Firebase Config ----
 const firebaseConfig = {
@@ -226,6 +227,12 @@ bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
   sendMainMenu(userId);
 });
 
+bot.on('message', async (msg) => {
+  const userId = msg.from.id;
+  if (!botActive && userId !== adminId) return;
+  // ... ادامه
+});
+
 // ---- Panel for admin ----
 bot.onText(/\/panel/, async (msg) => {
   const userId = msg.from.id;
@@ -235,42 +242,48 @@ bot.onText(/\/panel/, async (msg) => {
   bot.sendMessage(userId, 'پنل مدیریت:', {
     reply_markup: {
       inline_keyboard: [
-        [
-          { text: '➕ افزودن امتیاز', callback_data: 'add_points' },
-          { text: '➖ کسر امتیاز', callback_data: 'sub_points' }
-        ],
-        [
-          { text: '📢 پیام همگانی', callback_data: 'broadcast' }
-        ],
-        [
-          { text: '🚫بن کردن کاربر', callback_data: 'ban_user' },
-          { text: '☑️حذف بن کاربر', callback_data: 'unban_user' }
-        ],
-        [
-          { text: '🌐تغییر متن راهنما', callback_data: 'edit_help' }
-        ],
-        [
-          { text: '🎯 دادن امتیاز به همه', callback_data: 'add_points_all' },
-          { text: '↩️ بازگشت', callback_data: 'panel_back' }
-        ],
-        [
-          { text: '➕ افزودن کد هدیه', callback_data: 'add_gift_code' },
-          { text: '➖ حذف کد هدیه', callback_data: 'delete_gift_code' }
-        ],
-        [
-          { text: '🎁 ساخت کد هدیه همگانی', callback_data: 'add_global_gift_code' }
-        ],
-        [
-          { text: '📜 لیست همه کدها', callback_data: 'list_gift_codes' },
-          { text: '📊 آمار ربات', callback_data: 'bot_stats' }
-        ],
-        [
-          { text: '🔍 مدیریت اسکوادها', callback_data: 'admin_squad_list' }
-        ],
-        [
-          { text: '🗑 حذف اسکواد تاییدشده', callback_data: 'admin_delete_approved_squads' }
-        ]
-      ]
+  [
+    { 
+      text: botActive ? '🔴 خاموش کردن ربات' : '🟢 روشن کردن ربات', 
+      callback_data: botActive ? 'deactivate_bot' : 'activate_bot' 
+    }
+  ],
+  [
+    { text: '➕ افزودن امتیاز', callback_data: 'add_points' },
+    { text: '➖ کسر امتیاز', callback_data: 'sub_points' }
+  ],
+  [
+    { text: '📢 پیام همگانی', callback_data: 'broadcast' }
+  ],
+  [
+    { text: '🚫بن کردن کاربر', callback_data: 'ban_user' },
+    { text: '☑️حذف بن کاربر', callback_data: 'unban_user' }
+  ],
+  [
+    { text: '🌐تغییر متن راهنما', callback_data: 'edit_help' }
+  ],
+  [
+    { text: '🎯 دادن امتیاز به همه', callback_data: 'add_points_all' },
+    { text: '↩️ بازگشت', callback_data: 'panel_back' }
+  ],
+  [
+    { text: '➕ افزودن کد هدیه', callback_data: 'add_gift_code' },
+    { text: '➖ حذف کد هدیه', callback_data: 'delete_gift_code' }
+  ],
+  [
+    { text: '🎁 ساخت کد هدیه همگانی', callback_data: 'add_global_gift_code' }
+  ],
+  [
+    { text: '📜 لیست همه کدها', callback_data: 'list_gift_codes' },
+    { text: '📊 آمار ربات', callback_data: 'bot_stats' }
+  ],
+  [
+    { text: '🔍 مدیریت اسکوادها', callback_data: 'admin_squad_list' }
+  ],
+  [
+    { text: '🗑 حذف اسکواد تاییدشده', callback_data: 'admin_delete_approved_squads' }
+  ]
+   ]
     }
   });
 });
@@ -469,6 +482,26 @@ bot.on('callback_query', async (query) => {
     return;
   }
 
+  if (!botActive && userId !== adminId) {
+    await bot.answerCallbackQuery(query.id, { text: 'ربات موقتاً خاموش است.', show_alert: true });
+    return;
+  }
+  // ... ادامه
+  if (data === 'deactivate_bot' && userId === adminId) {
+    botActive = false;
+    await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی خاموش شد.' });
+    // ... پنل را آپدیت کن
+    return;
+  }
+  if (data === 'activate_bot' && userId === adminId) {
+    botActive = true;
+    await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی روشن شد.' });
+    // ... پنل را آپدیت کن
+    return;
+  }
+  // ... ادامه سوییچ
+});
+
   // ---- اسکواد: حذف فقط توسط ادمین ----
 if (data.startsWith('delete_squadreq_') && userId === adminId) {
   const reqId = data.replace('delete_squadreq_', '');
@@ -513,6 +546,27 @@ if (data.startsWith('delete_squadreq_') && userId === adminId) {
       approved: false,
       deleted: false
     });
+    
+      if (!botActive && userId !== adminId) {
+    await bot.answerCallbackQuery(query.id, { text: 'ربات موقتاً خاموش است.', show_alert: true });
+    return;
+  }
+  // ... ادامه
+  if (data === 'deactivate_bot' && userId === adminId) {
+    botActive = false;
+    await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی خاموش شد.' });
+    // ... پنل را آپدیت کن
+    return;
+  }
+  if (data === 'activate_bot' && userId === adminId) {
+    botActive = true;
+    await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی روشن شد.' });
+    // ... پنل را آپدیت کن
+    return;
+  }
+  // ... ادامه سوییچ
+});
+    
     // کسر امتیاز
     await updatePoints(userId, -5);
     userState[userId] = null;
