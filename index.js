@@ -2,7 +2,7 @@ require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const { initializeApp } = require('firebase/app');
-const { getDatabase, ref, set, get, update, remove } = require('firebase/database');
+const { getDatabase, ref, set, get, update, remove, push } = require('firebase/database');
 
 const app = express();
 
@@ -18,7 +18,7 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getDatabase(firebaseApp);
 
-// ---- Helper Functions ----
+// ---- User Helper Functions ----
 const userRef = userId => ref(db, `users/${userId}`);
 async function ensureUser(user) {
   const snap = await get(userRef(user.id));
@@ -48,8 +48,6 @@ async function updateLastChanceUse(userId, timestamp) {
 async function setBanStatus(userId, status) {
   await update(userRef(userId), { banned: status ? 1 : 0 });
 }
-const giftCodeRef = code => ref(db, `gift_codes/${code}`);
-const globalGiftCodeRef = code => ref(db, `global_gift_codes/${code}`);
 const settingsRef = key => ref(db, `settings/${key}`);
 async function getHelpText() {
   const snap = await get(settingsRef('help_text'));
@@ -58,6 +56,10 @@ async function getHelpText() {
 async function setHelpText(newText) {
   await set(settingsRef('help_text'), newText);
 }
+
+// ---- Gift Code helpers ----
+const giftCodeRef = code => ref(db, `gift_codes/${code}`);
+const globalGiftCodeRef = code => ref(db, `global_gift_codes/${code}`);
 async function upsertGiftCode(code, points) {
   await set(giftCodeRef(code), points);
 }
@@ -104,6 +106,27 @@ async function listGiftCodesCombined() {
   return codes.concat(gCodes);
 }
 
+// ---- Squad Request Helpers ----
+const squadReqRef = id => ref(db, `squad_requests/${id}`);
+const squadReqsRef = ref(db, 'squad_requests');
+async function getSquadReq(id) {
+  const snap = await get(squadReqRef(id));
+  return snap.exists() ? snap.val() : null;
+}
+async function getAllSquadReqs(filter = {}) {
+  const snap = await get(squadReqsRef);
+  if (!snap.exists()) return [];
+  let reqs = Object.entries(snap.val()).map(([id, v]) => ({ id, ...v }));
+  // فیلتر بر اساس وضعیت تایید و حذف نشده بودن
+  if (filter.approved !== undefined)
+    reqs = reqs.filter(r => !!r.approved === !!filter.approved);
+  if (filter.user_id !== undefined)
+    reqs = reqs.filter(r => r.user_id === filter.user_id);
+  if (filter.deleted !== undefined)
+    reqs = reqs.filter(r => !!r.deleted === !!filter.deleted);
+  return reqs.filter(r => !r.deleted);
+}
+
 // ---- Anti-Spam ----
 const buttonSpamMap = {}; // { userId: [timestamps] }
 const muteMap = {}; // { userId: muteUntilTimestamp }
@@ -118,7 +141,17 @@ function isMuted(userId) {
 
 // ---- User State ----
 const userState = {};
-const supportChatMap = {}; // { adminMsgId: userId }
+const supportChatMap = {};
+
+// ---- Bot Init ----
+const bot = new TelegramBot(token, { polling: false });
+bot.setWebHook(`${webhookUrl}/bot${token}`);
+
+app.use(express.json());
+app.post(`/bot${token}`, (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
+});
 
 // ---- Main Menu ----
 function sendMainMenu(userId) {
@@ -132,6 +165,10 @@ function sendMainMenu(userId) {
         [
           { text: '🔗دعوت دوستان', callback_data: 'referral' },
           { text: '👤 پروفایل', callback_data: 'profile' }
+        ],
+        [
+          { text: '➕ ثبت درخواست اسکواد', callback_data: 'squad_request' },
+          { text: '👥 مشاهده اسکوادها', callback_data: 'view_squads' }
         ],
         [
           { text: '💬پشتیبانی', callback_data: 'support' }
@@ -151,16 +188,6 @@ function sendMainMenu(userId) {
   };
   bot.sendMessage(userId, 'سلام، به ربات محاسبه‌گر Mobile Legends خوش آمدید ✨', keyboard);
 }
-
-// ---- Bot Initialization ----
-const bot = new TelegramBot(token, { polling: false });
-bot.setWebHook(`${webhookUrl}/bot${token}`);
-
-app.use(express.json());
-app.post(`/bot${token}`, (req, res) => {
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
-});
 
 // ---- /start with referral ----
 bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
@@ -185,7 +212,7 @@ bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
   sendMainMenu(userId);
 });
 
-// ---- /panel for admin ----
+// ---- Panel for admin ----
 bot.onText(/\/panel/, async (msg) => {
   const userId = msg.from.id;
   if (userId !== adminId) {
@@ -222,6 +249,9 @@ bot.onText(/\/panel/, async (msg) => {
         [
           { text: '📜 لیست همه کدها', callback_data: 'list_gift_codes' },
           { text: '📊 آمار ربات', callback_data: 'bot_stats' }
+        ],
+        [
+          { text: '🔍 مدیریت اسکوادها', callback_data: 'admin_squad_list' }
         ]
       ]
     }
@@ -255,92 +285,75 @@ bot.on('callback_query', async (query) => {
   if (!user) return await bot.answerCallbackQuery(query.id, { text: 'خطا در دریافت اطلاعات کاربر.', show_alert: true });
   if (user?.banned) return await bot.answerCallbackQuery(query.id, { text: 'شما بن شده‌اید و اجازه استفاده ندارید.', show_alert: true });
 
-  // --- آمار ربات ---
-  if (data === 'bot_stats' && userId === adminId) {
-    const usersSnap = await get(ref(db, 'users'));
-    const users = usersSnap.exists() ? Object.values(usersSnap.val()) : [];
-    const totalUsers = users.length;
-    const bannedUsers = users.filter(u => u.banned).length;
-    const codesSnap = await get(ref(db, 'gift_codes'));
-    const codes = codesSnap.exists() ? Object.keys(codesSnap.val()) : [];
-    const globalSnap = await get(ref(db, 'global_gift_codes'));
-    const gCodes = globalSnap.exists() ? Object.keys(globalSnap.val()) : [];
+  // ---- اسکواد: ثبت درخواست ----
+  if (data === 'squad_request') {
+    userState[userId] = { step: 'squad_name' };
     await bot.answerCallbackQuery(query.id);
-    return bot.sendMessage(userId, `📊 آمار ربات:\n👥 کاربران کل: ${totalUsers}\n⛔ کاربران بن شده: ${bannedUsers}\n🎁 کد هدیه یک‌بارمصرف: ${codes.length}\n🎁 کد هدیه همگانی: ${gCodes.length}`);
+    return bot.sendMessage(userId, 'نام اسکواد خود را وارد کنید:');
   }
-
-  // ---- ساخت کد هدیه همگانی ----
-  if (data === 'add_global_gift_code' && userId === adminId) {
-    userState[userId] = { step: 'add_global_gift_code_enter_code' };
+  if (data === 'view_squads') {
+    const approvedReqs = await getAllSquadReqs({ approved: true });
+    if (approvedReqs.length == 0)
+      return bot.sendMessage(userId, 'هیچ اسکواد فعالی وجود ندارد.');
+    showSquadCard(userId, approvedReqs, 0);
     await bot.answerCallbackQuery(query.id);
-    return bot.sendMessage(userId, 'کد هدیه همگانی جدید را وارد کنید:');
-  }
-
-  // ---- شانس (لایسنس بی‌نهایت برای adminId) ----
-  if (data === 'chance') {
-    const now = Date.now();
-    const lastUse = user.last_chance_use || 0;
-    if (userId !== adminId && now - lastUse < 24*60*60*1000) {
-      const hoursLeft = Math.ceil((24*60*60*1000 - (now - lastUse)) / (60*60*1000));
-      await bot.answerCallbackQuery(query.id, { text: `شما تا ${hoursLeft} ساعت دیگر نمی‌توانید دوباره شانس خود را امتحان کنید.`, show_alert: true });
-      return;
-    }
-    userState[userId] = { step: 'chance_select' };
-    await bot.answerCallbackQuery(query.id);
-    return bot.sendMessage(userId,
-      `🍀 شانست رو انتخاب کن!\n\n
-🎲 اگر تاس بندازی و ۶ بیاد: ۲ امتیاز می‌گیری
-⚽ اگر پنالتی بزنی و گل بشه (GOAL): ۱ امتیاز می‌گیری
-🎯 اگر دارت بزنی و وسط هدف (BULLSEYE) بزنی: ۱ امتیاز می‌گیری
-
-یک گزینه رو انتخاب کن:`,
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: '🎲 تاس', callback_data: 'chance_dice' },
-              { text: '⚽ پنالتی', callback_data: 'chance_football' },
-              { text: '🎯 دارت', callback_data: 'chance_dart' }
-            ]
-          ]
-        }
-      }
-    );
-  }
-
-  if (['chance_dice','chance_football','chance_dart'].includes(data)) {
-    if (userState[userId]?.step !== 'chance_select') {
-      await bot.answerCallbackQuery(query.id);
-      return;
-    }
-    const now = Date.now();
-    const lastUse = user.last_chance_use || 0;
-    if (userId !== adminId && now - lastUse < 24*60*60*1000) {
-      await bot.answerCallbackQuery(query.id, { text: 'تا ۲۴ ساعت آینده نمی‌تونی دوباره امتحان کنی.', show_alert: true });
-      return;
-    }
-    let emoji, winValue, prize, readable;
-    if (data === 'chance_dice') {
-      emoji = '🎲'; winValue = 6; prize = 2; readable = 'عدد ۶';
-    } else if (data === 'chance_football') {
-      emoji = '⚽'; winValue = 3; prize = 1; readable = 'GOAL';
-    } else if (data === 'chance_dart') {
-      emoji = '🎯'; winValue = 6; prize = 1; readable = 'BULLSEYE';
-    }
-    const diceMsg = await bot.sendDice(userId, { emoji });
-    let isWin = diceMsg.dice.value === winValue;
-    if (userId !== adminId) await updateLastChanceUse(userId, now);
-    if (isWin) {
-      await updatePoints(userId, prize);
-      await bot.sendMessage(userId, `تبریک! شانست گرفت و (${readable}) اومد و ${prize} امتیاز گرفتی!`);
-    } else {
-      await bot.sendMessage(userId, `متاسفانه شانست نگرفت 😞 دوباره فردا امتحان کن!`);
-    }
-    userState[userId] = null;
     return;
   }
 
-  // ---- سایر دکمه‌ها ----
+  // ---- اسکواد: مدیریت توسط ادمین ----
+  if (data === 'admin_squad_list' && userId === adminId) {
+    const pendingReqs = await getAllSquadReqs({ approved: false });
+    if (!pendingReqs.length) {
+      await bot.answerCallbackQuery(query.id);
+      return bot.sendMessage(userId, 'درخواستی برای بررسی وجود ندارد.');
+    }
+    showAdminSquadCard(userId, pendingReqs, 0);
+    await bot.answerCallbackQuery(query.id);
+    return;
+  }
+  if (data.startsWith('admin_squad_card_') && userId === adminId) {
+    const idx = parseInt(data.replace('admin_squad_card_', ''));
+    const pendingReqs = await getAllSquadReqs({ approved: false });
+    showAdminSquadCard(userId, pendingReqs, idx);
+    await bot.answerCallbackQuery(query.id);
+    return;
+  }
+
+  // ---- اسکواد: تایید توسط ادمین ----
+  if (data.startsWith('approve_squadreq_') && userId === adminId) {
+    const reqId = data.replace('approve_squadreq_', '');
+    const req = await getSquadReq(reqId);
+    if (!req || req.approved || req.deleted)
+      return bot.answerCallbackQuery(query.id, { text: 'درخواست معتبر نیست یا قبلا تایید/حذف شده.', show_alert: true });
+    await update(squadReqRef(reqId), { approved: true });
+    await bot.sendMessage(req.user_id,
+      `✅ درخواست شما برای اسکواد «${req.squad_name}» توسط ادمین تایید شد!\n🟢 اکنون درخواست شما برای دیگران نمایش داده خواهد شد.`);
+    await bot.answerCallbackQuery(query.id, { text: 'تایید شد و اطلاع‌رسانی گردید.' });
+    return;
+  }
+
+  // ---- اسکواد: حذف فقط توسط ادمین ----
+  if (data.startsWith('delete_squadreq_') && userId === adminId) {
+    const reqId = data.replace('delete_squadreq_', '');
+    const req = await getSquadReq(reqId);
+    if (!req || req.deleted)
+      return bot.answerCallbackQuery(query.id, { text: 'درخواست پیدا نشد یا قبلا حذف شده.', show_alert: true });
+    await update(squadReqRef(reqId), { deleted: true });
+    await bot.sendMessage(req.user_id, `درخواست اسکواد شما توسط مدیریت حذف شد.`);
+    await bot.answerCallbackQuery(query.id, { text: 'درخواست حذف شد.' });
+    return;
+  }
+
+  // ---- نمایش کارت اسکواد با ورق‌زنی (عمومی) ----
+  if (data.startsWith('squad_card_')) {
+    const idx = parseInt(data.replace('squad_card_', ''));
+    const reqs = await getAllSquadReqs({ approved: true });
+    showSquadCard(userId, reqs, idx);
+    await bot.answerCallbackQuery(query.id);
+    return;
+  }
+
+  // ---- محاسبه ریت و برد/باخت و ... ----
   switch (data) {
     case 'calculate_rate':
     case 'calculate_wl':
@@ -443,7 +456,7 @@ bot.on('callback_query', async (query) => {
   }
 });
 
-// ---- MESSAGE HANDLER ----
+// ---- اداره مراحل ثبت اسکواد ----
 bot.on('message', async (msg) => {
   const userId = msg.from.id;
   const text = msg.text || '';
@@ -651,6 +664,146 @@ bot.on('message', async (msg) => {
     }
     userState[userId] = null;
     return bot.sendMessage(userId, 'کد نامعتبر است یا منقضی شده است.');
+  }
+
+  // ---- اداره مراحل ثبت اسکواد ----
+  if (state.step === 'squad_name') {
+    state.squad_name = text;
+    state.step = 'squad_roles';
+    return bot.sendMessage(userId, 'چه رولی نیاز دارید؟ (مثال: تانک، ساپورت...)');
+  }
+  if (state.step === 'squad_roles') {
+    state.roles_needed = text;
+    state.step = 'min_rank';
+    return bot.sendMessage(userId, 'حداقل رنک مورد نیاز؟');
+  }
+  if (state.step === 'min_rank') {
+    state.min_rank = text;
+    state.step = 'details';
+    return bot.sendMessage(userId, 'توضیحات (اختیاری):');
+  }
+  if (state.step === 'details') {
+    state.details = text;
+    // بررسی امتیاز
+    if ((user.points || 0) < 5) {
+      userState[userId] = null;
+      return bot.sendMessage(userId, 'برای ثبت درخواست باید حداقل ۵ امتیاز داشته باشید.');
+    }
+    // تایید ثبت
+    userState[userId] = { step: 'confirm_squad_req', ...state };
+    return bot.sendMessage(userId,
+      `درخواست شما:\n\nاسکواد: ${state.squad_name}\nنقش مورد نیاز: ${state.roles_needed}\nحداقل رنک: ${state.min_rank}\nتوضیحات: ${state.details}\n\nبا ثبت درخواست ۵ امتیاز از شما کسر می‌شود. تایید می‌کنید؟`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: 'ثبت نهایی ✅', callback_data: 'confirm_squad_req' }],
+            [{ text: 'انصراف ❌', callback_data: 'cancel_squad_req' }]
+          ]
+        }
+      }
+    );
+  }
+});
+
+// ---- تایید یا کنسل ثبت اسکواد توسط کاربر ----
+bot.on('callback_query', async (query) => {
+  const userId = query.from.id;
+  const data = query.data;
+  const state = userState[userId];
+
+  // لغو
+  if (data === 'cancel_squad_req') {
+    userState[userId] = null;
+    await bot.answerCallbackQuery(query.id, { text: 'لغو شد.' });
+    return bot.sendMessage(userId, 'درخواست لغو شد.');
+  }
+
+  // تایید
+  if (data === 'confirm_squad_req' && state && state.squad_name) {
+    // ذخیره در دیتابیس
+    const reqRef = push(squadReqsRef);
+    const reqId = reqRef.key;
+    await set(reqRef, {
+      user_id: userId,
+      squad_name: state.squad_name,
+      roles_needed: state.roles_needed,
+      min_rank: state.min_rank,
+      details: state.details,
+      created_at: Date.now(),
+      approved: false,
+      deleted: false
+    });
+    // کسر امتیاز
+    await updatePoints(userId, -5);
+    userState[userId] = null;
+    await bot.answerCallbackQuery(query.id, { text: 'درخواست ثبت شد.' });
+    bot.sendMessage(userId, '✅ درخواست شما با موفقیت ثبت شد و به صف بررسی مدیریت اضافه شد.');
+    // اطلاع به ادمین
+    bot.sendMessage(adminId,
+      `درخواست جدید اسکواد:\n\nاسکواد: ${state.squad_name}\nکاربر: ${userId}\nرنک: ${state.min_rank}\nنقش: ${state.roles_needed}\nتوضیحات: ${state.details}\n\n`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: 'تایید ✅', callback_data: `approve_squadreq_${reqId}` },
+              { text: 'حذف ❌', callback_data: `delete_squadreq_${reqId}` }
+            ]
+          ]
+        }
+      }
+    );
+    return;
+  }
+});
+
+// ---- نمایش کارت اسکواد با ورق‌زنی (عمومی) ----
+async function showSquadCard(userId, reqs, idx) {
+  if (reqs.length === 0)
+    return bot.sendMessage(userId, 'هیچ اسکوادی وجود ندارد.');
+  if (idx < 0) idx = 0;
+  if (idx >= reqs.length) idx = reqs.length - 1;
+  const req = reqs[idx];
+  let txt = `🆔 اسکواد: ${req.squad_name}\nنقش مورد نیاز: ${req.roles_needed}\nرنک: ${req.min_rank}\nتوضیحات: ${req.details}\n`;
+  txt += `\nدرخواست‌دهنده: ${req.user_id}`;
+  const buttons = [];
+  if (idx > 0) buttons.push({ text: '⬅️ قبلی', callback_data: `squad_card_${idx - 1}` });
+  if (idx < reqs.length - 1) buttons.push({ text: 'بعدی ➡️', callback_data: `squad_card_${idx + 1}` });
+  bot.sendMessage(userId, txt, {
+    reply_markup: {
+      inline_keyboard: [buttons.length ? buttons : []]
+    }
+  });
+}
+
+// ---- نمایش کارت اسکواد ادمین با ورق‌زنی و دکمه تایید/حذف ----
+async function showAdminSquadCard(userId, reqs, idx) {
+  if (reqs.length === 0)
+    return bot.sendMessage(userId, 'درخواستی وجود ندارد.');
+  if (idx < 0) idx = 0;
+  if (idx >= reqs.length) idx = reqs.length - 1;
+  const req = reqs[idx];
+  let txt = `🆔 اسکواد: ${req.squad_name}\nنقش مورد نیاز: ${req.roles_needed}\nرنک: ${req.min_rank}\nتوضیحات: ${req.details}\n`;
+  txt += `\nدرخواست‌دهنده: ${req.user_id}`;
+  const navBtns = [];
+  if (idx > 0) navBtns.push({ text: '⬅️ قبلی', callback_data: `admin_squad_card_${idx - 1}` });
+  if (idx < reqs.length - 1) navBtns.push({ text: 'بعدی ➡️', callback_data: `admin_squad_card_${idx + 1}` });
+  const actionBtns = [
+    { text: 'تایید ✅', callback_data: `approve_squadreq_${req.id}` },
+    { text: 'حذف ❌', callback_data: `delete_squadreq_${req.id}` }
+  ];
+  bot.sendMessage(userId, txt, {
+    reply_markup: {
+      inline_keyboard: [actionBtns, navBtns.length ? navBtns : []]
+    }
+  });
+}
+
+// ---- پشتیبانی ----
+bot.on('callback_query', async (query) => {
+  if (query.data === 'support') {
+    userState[query.from.id] = null;
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(query.from.id, 'برای پشتیبانی پیام خود را ارسال کنید.');
   }
 });
 
