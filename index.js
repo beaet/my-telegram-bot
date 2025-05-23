@@ -317,9 +317,8 @@ bot.onText(/\/panel/, async (msg) => {
     return bot.sendMessage(userId, 'شما دسترسی به پنل مدیریت ندارید.');
   }
   bot.sendMessage(userId, 'پنل مدیریت:', adminPanelKeyboard());
-});
+}); // اینجا یک } و یک ) برای پایان onText
 
-// ---- Main menu back ----
 bot.on('callback_query', async (query) => {
   const userId = query.from.id;
   const data = query.data;
@@ -331,34 +330,16 @@ bot.on('callback_query', async (query) => {
   if (user?.banned)
     return await bot.answerCallbackQuery(query.id, { text: 'شما بن شده‌اید و اجازه استفاده ندارید.', show_alert: true });
 
-  // ---- main menu
   if (data === 'main_menu') {
     await bot.answerCallbackQuery(query.id);
     sendMainMenu(userId, messageId);
     return;
   }
 
-  // ادامه منطق‌های دیگر...
-});
+  // ... ادامه منطق‌های دیگر
 
-  // ... سایر منطق‌ها ...
-
-  // ادامه منطق...
-});
-  const userId = query.from.id;
-
-  const user = await getUser(userId);
-  if (!user)
-    return await bot.answerCallbackQuery(query.id, { text: 'خطا در دریافت اطلاعات کاربر.', show_alert: true });
-
-  if (user?.banned)
-    return await bot.answerCallbackQuery(query.id, { text: 'شما بن شده‌اید و اجازه استفاده ندارید.', show_alert: true });
-
-  // ... ادامه کدها
-});
-
-  // ادامه منطق...
-});
+}); // اینجا هم یک } و یک ) برای پایان 
+  
   // ---- لیست پیک/بن ----
   if (data === 'pickban_list') {
     await bot.answerCallbackQuery(query.id);
