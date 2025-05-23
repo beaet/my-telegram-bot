@@ -432,6 +432,57 @@ bot.on('callback_query', async (query) => {
     await bot.answerCallbackQuery(query.id);
     return;
   }
+  
+    // ---- نمایش کارت اسکواد با ورق‌زنی (عمومی) ----
+  if (data.startsWith('squad_card_')) {
+    const idx = parseInt(data.replace('squad_card_', ''));
+    const reqs = await getAllSquadReqs({ approved: true });
+    showSquadCard(userId, reqs, idx, messageId);
+    await bot.answerCallbackQuery(query.id);
+    return;
+  }
+
+  // ---- اسکواد: تایید یا لغو ثبت توسط کاربر ----
+  if (data === 'cancel_squad_req') {
+    userState[userId] = null;
+    await bot.answerCallbackQuery(query.id, { text: 'لغو شد.' });
+    return bot.sendMessage(userId, 'درخواست لغو شد.');
+  }
+  if (data === 'confirm_squad_req' && userState[userId] && userState[userId].squad_name) {
+    const state = userState[userId];
+    // ذخیره در دیتابیس
+    const reqRef = push(squadReqsRef);
+    const reqId = reqRef.key;
+    await set(reqRef, {
+      user_id: userId,
+      squad_name: state.squad_name,
+      roles_needed: state.roles_needed,
+      game_id: state.game_id,
+      min_rank: state.min_rank,
+      details: state.details,
+      created_at: Date.now(),
+      approved: false,
+      deleted: false
+    });
+    
+      if (!botActive && userId !== adminId) {
+    await bot.answerCallbackQuery(query.id, { text: 'ربات موقتاً خاموش است.', show_alert: true });
+    return;
+  }
+  // ... ادامه
+  if (data === 'deactivate_bot' && userId === adminId) {
+    botActive = false;
+    await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی خاموش شد.' });
+    // ... پنل را آپدیت کن
+    return;
+  }
+  if (data === 'activate_bot' && userId === adminId) {
+    botActive = true;
+    await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی روشن شد.' });
+    // ... پنل را آپدیت کن
+    return;
+  }
+  // ... ادامه سوییچ
 
   // ---- مدیریت اسکواد: تایید نشده (ادمین) ----
   if (data === 'admin_squad_list' && userId === adminId) {
@@ -515,58 +566,6 @@ bot.on('callback_query', async (query) => {
 });
 
   // ---- اسکواد: حذف فقط توسط ادمین ----
-  
-  // ---- نمایش کارت اسکواد با ورق‌زنی (عمومی) ----
-  if (data.startsWith('squad_card_')) {
-    const idx = parseInt(data.replace('squad_card_', ''));
-    const reqs = await getAllSquadReqs({ approved: true });
-    showSquadCard(userId, reqs, idx, messageId);
-    await bot.answerCallbackQuery(query.id);
-    return;
-  }
-
-  // ---- اسکواد: تایید یا لغو ثبت توسط کاربر ----
-  if (data === 'cancel_squad_req') {
-    userState[userId] = null;
-    await bot.answerCallbackQuery(query.id, { text: 'لغو شد.' });
-    return bot.sendMessage(userId, 'درخواست لغو شد.');
-  }
-  if (data === 'confirm_squad_req' && userState[userId] && userState[userId].squad_name) {
-    const state = userState[userId];
-    // ذخیره در دیتابیس
-    const reqRef = push(squadReqsRef);
-    const reqId = reqRef.key;
-    await set(reqRef, {
-      user_id: userId,
-      squad_name: state.squad_name,
-      roles_needed: state.roles_needed,
-      game_id: state.game_id,
-      min_rank: state.min_rank,
-      details: state.details,
-      created_at: Date.now(),
-      approved: false,
-      deleted: false
-    });
-    
-      if (!botActive && userId !== adminId) {
-    await bot.answerCallbackQuery(query.id, { text: 'ربات موقتاً خاموش است.', show_alert: true });
-    return;
-  }
-  // ... ادامه
-  if (data === 'deactivate_bot' && userId === adminId) {
-    botActive = false;
-    await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی خاموش شد.' });
-    // ... پنل را آپدیت کن
-    return;
-  }
-  if (data === 'activate_bot' && userId === adminId) {
-    botActive = true;
-    await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی روشن شد.' });
-    // ... پنل را آپدیت کن
-    return;
-  }
-  // ... ادامه سوییچ
-});
     
     // کسر امتیاز
     await updatePoints(userId, -5);
