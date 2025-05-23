@@ -292,6 +292,11 @@ bot.on('callback_query', async (query) => {
   const data = query.data;
   // ...
 
+  if (!botActive && userId !== adminId) {
+    await bot.answerCallbackQuery(query.id, { text: 'ربات موقتاً خاموش است.', show_alert: true });
+    return;
+  }
+  
   if (data.startsWith('delete_squadreq_') && userId === adminId) {
     const reqId = data.replace('delete_squadreq_', '');
     const req = await getSquadReq(reqId);
@@ -467,7 +472,8 @@ bot.on('callback_query', async (query) => {
   if (!botActive && userId !== adminId) {
     return bot.sendMessage(userId, 'ربات موقتاً خاموش است.');
   }
-  }
+  
+  
   // ... ادامه
   if (data === 'deactivate_bot' && userId === adminId) {
   botActive = false;
@@ -542,9 +548,6 @@ if (data === 'activate_bot' && userId === adminId) {
     return;
   }
 
-  bot.answerCallbackQuery(query.id, { text: 'ربات موقتاً خاموش است.', show_alert: true });
-    return;
-  }
 
   // ... ادامه کد
   if (data === 'deactivate_bot' && userId === adminId) {
