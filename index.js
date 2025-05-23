@@ -337,10 +337,6 @@ bot.on('callback_query', async (query) => {
     return;
   }
 
-  // ادامه منطق‌های دیگر...
-});
-  // ... ادامه منطق‌های دیگر
-  
   // ---- لیست پیک/بن ----
   if (data === 'pickban_list') {
     await bot.answerCallbackQuery(query.id);
@@ -356,6 +352,11 @@ bot.on('callback_query', async (query) => {
       }
     );
   }
+
+  // ... ادامه تمامی if (data === ...) و switch (data) همان جا قرار بگیرد
+
+  // آخرین خط این تابع:
+});
 
   // ---- بخش شانس ----
   if (data === 'chance') {
