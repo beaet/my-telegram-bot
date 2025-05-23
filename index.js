@@ -258,10 +258,11 @@ bot.onText(/\/panel/, async (msg) => {
   if (userId !== adminId) {
     return bot.sendMessage(userId, 'شما دسترسی به پنل مدیریت ندارید.');
   }
-  bot.sendMessage(userId, 'پنل مدیریت:', {
-  reply_markup: {
-    inline_keyboard: [
-      [
+
+  await bot.sendMessage(userId, 'پنل مدیریت:', {
+    reply_markup: {
+      inline_keyboard: [
+        [
         { text: '➕ افزودن امتیاز', callback_data: 'add_points' },
         { text: '➖ کسر امتیاز', callback_data: 'sub_points' }
       ],
@@ -1217,4 +1218,4 @@ let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: $
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
-}); 
+}); و 
