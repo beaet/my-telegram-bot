@@ -321,7 +321,7 @@ bot.onText(/\/panel/, async (msg) => {
 
   // ---- Main menu back ----
   if (data === 'main_menu') {
-    await bot.answerCallbackQuery(query.id);
+    bot.on('callback_query', async (query) => {
     sendMainMenu(userId, messageId);
     return;
   }
