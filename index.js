@@ -325,6 +325,16 @@ bot.on('callback_query', async (query) => {
   const data = query.data;
   const messageId = query.message && query.message.message_id;
 
+  // گرفتن اطلاعات کاربر
+  const user = await getUser(userId);
+  if (!user) {
+    return await bot.answerCallbackQuery(query.id, { text: 'خطا در دریافت اطلاعات کاربر.', show_alert: true });
+  }
+
+  if (user?.banned) {
+    return await bot.answerCallbackQuery(query.id, { text: 'شما بن شده‌اید و اجازه استفاده ندارید.', show_alert: true });
+  }
+
   if (data === 'main_menu') {
     await bot.answerCallbackQuery(query.id);
     sendMainMenu(userId, messageId);
@@ -332,8 +342,9 @@ bot.on('callback_query', async (query) => {
   }
 
   // ... سایر منطق‌ها ...
-});
 
+  // ادامه منطق...
+});
   const userId = query.from.id;
 
   const user = await getUser(userId);
