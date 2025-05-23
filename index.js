@@ -259,50 +259,49 @@ bot.onText(/\/panel/, async (msg) => {
     return bot.sendMessage(userId, 'شما دسترسی به پنل مدیریت ندارید.');
   }
   bot.sendMessage(userId, 'پنل مدیریت:', {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          { text: '➕ افزودن امتیاز', callback_data: 'add_points' },
-          { text: '➖ کسر امتیاز', callback_data: 'sub_points' }
-        ],
-        [
-          { text: '📢 پیام همگانی', callback_data: 'broadcast' }
-        ],
-        [
-          { text: '🚫بن کردن کاربر', callback_data: 'ban_user' },
-          { text: '☑️حذف بن کاربر', callback_data: 'unban_user' }
-        ],
-        [
-          { text: '🌐تغییر متن راهنما', callback_data: 'edit_help' }
-        ],
-        [
-          { text: '🎯 دادن امتیاز به همه', callback_data: 'add_points_all' },
-          { text: '↩️ بازگشت', callback_data: 'panel_back' }
-        ],
-        [
-          { text: '➕ افزودن کد هدیه', callback_data: 'add_gift_code' },
-          { text: '➖ حذف کد هدیه', callback_data: 'delete_gift_code' }
-        ],
-        [
-          { text: '🎁 ساخت کد هدیه همگانی', callback_data: 'add_global_gift_code' }
-        ],
-        [
-          { text: '📜 لیست همه کدها', callback_data: 'list_gift_codes' },
-          { text: '📊 آمار ربات', callback_data: 'bot_stats' }
-        ],
-        [
-          { text: '🔍 مدیریت اسکوادها', callback_data: 'admin_squad_list' }
-        ],
-        [
-          { text: '🗑 حذف اسکواد تاییدشده', callback_data: 'admin_delete_approved_squads' }
-        ],
-        // --- New features below ---
-        [
-          { text: '🟢 روشن کردن ربات', callback_data: 'enable_bot' },
-          { text: '🔴 خاموش کردن ربات', callback_data: 'disable_bot' }
-        ],
-        [
-      { text: '➕ ساخت دکمه جدید', callback_data: 'add_dynamic_button' },
+  reply_markup: {
+    inline_keyboard: [
+      [
+        { text: '➕ افزودن امتیاز', callback_data: 'add_points' },
+        { text: '➖ کسر امتیاز', callback_data: 'sub_points' }
+      ],
+      [
+        { text: '📢 پیام همگانی', callback_data: 'broadcast' }
+      ],
+      [
+        { text: '🚫بن کردن کاربر', callback_data: 'ban_user' },
+        { text: '☑️حذف بن کاربر', callback_data: 'unban_user' }
+      ],
+      [
+        { text: '🌐تغییر متن راهنما', callback_data: 'edit_help' }
+      ],
+      [
+        { text: '🎯 دادن امتیاز به همه', callback_data: 'add_points_all' },
+        { text: '↩️ بازگشت', callback_data: 'panel_back' }
+      ],
+      [
+        { text: '➕ افزودن کد هدیه', callback_data: 'add_gift_code' },
+        { text: '➖ حذف کد هدیه', callback_data: 'delete_gift_code' }
+      ],
+      [
+        { text: '🎁 ساخت کد هدیه همگانی', callback_data: 'add_global_gift_code' }
+      ],
+      [
+        { text: '📜 لیست همه کدها', callback_data: 'list_gift_codes' },
+        { text: '📊 آمار ربات', callback_data: 'bot_stats' }
+      ],
+      [
+        { text: '🔍 مدیریت اسکوادها', callback_data: 'admin_squad_list' }
+      ],
+      [
+        { text: '🗑 حذف اسکواد تاییدشده', callback_data: 'admin_delete_approved_squads' }
+      ],
+      [
+        { text: '🟢 روشن کردن ربات', callback_data: 'enable_bot' },
+        { text: '🔴 خاموش کردن ربات', callback_data: 'disable_bot' }
+      ],
+      [
+        { text: '➕ ساخت دکمه جدید', callback_data: 'add_dynamic_button' },
         { text: '🗂 مدیریت دکمه‌ها', callback_data: 'manage_dynamic_buttons' }
       ],
       [
@@ -313,7 +312,7 @@ bot.onText(/\/panel/, async (msg) => {
       ]
     ]
   }
-};
+}); // این پرانتز بسته‌شده قبلاً جا افتاده بود
 
 // ---- CALLBACK QUERIES ----
 bot.on('callback_query', async (query) => {
