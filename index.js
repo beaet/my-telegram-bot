@@ -320,10 +320,11 @@ bot.onText(/\/panel/, async (msg) => {
 });
 
   // ---- Main menu back ----
-bot.on('callback_query', async (query) => {
-  const userId = query.from.id;
-  const data = query.data;
-  const messageId = query.message && query.message.message_id;
+bot.on('message', async (msg) => {
+  const userId = msg.from.id;
+  const user = await getUser(userId); // الان ارور نمیده
+  // ...
+});
 
   // ---- Main menu back ----
   if (data === 'main_menu') {
