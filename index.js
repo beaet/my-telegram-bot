@@ -545,17 +545,16 @@ if (data === 'activate_bot' && userId === adminId) {
   bot.answerCallbackQuery(query.id, { text: 'ربات موقتاً خاموش است.', show_alert: true });
     return;
   }
-  // ... ادامه
+
+  // ... ادامه کد
   if (data === 'deactivate_bot' && userId === adminId) {
     botActive = false;
     await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی خاموش شد.' });
-    // ... پنل را آپدیت کن
     return;
   }
   if (data === 'activate_bot' && userId === adminId) {
     botActive = true;
     await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی روشن شد.' });
-    // ... پنل را آپدیت کن
     return;
   }
   // ... ادامه سوییچ
