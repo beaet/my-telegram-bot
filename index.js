@@ -140,7 +140,7 @@ function sendMainMenu(userId) {
           { text: '📚راهنما', callback_data: 'help' }
         ],
         [
-           { text: '🎁خرید امتیاز', callback_data: 'buy' }
+           { text: '💰خرید امتیاز', callback_data: 'buy' }
         ],
         [
           { text: '🍀 شانس', callback_data: 'chance' },
