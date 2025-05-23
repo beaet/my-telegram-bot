@@ -470,16 +470,17 @@ bot.on('callback_query', async (query) => {
   }
 
   // ---- اسکواد: حذف فقط توسط ادمین ----
-  if (data.startsWith('delete_squadreq_') && userId === adminId) {
-    const reqId = data.replace('delete_squadreq_', '');
-    const req = await getSquadReq(reqId);
-    if (!req || req.deleted)
-      return bot.answerCallbackQuery(query.id, { text: 'درخواست پیدا نشد یا قبلا حذف شده.', show_alert: true });
-    await update(squadReqRef(reqId), { deleted: true });
-    await bot.sendMessage(req.user_id, `درخواست اسکواد شما توسط مدیریت حذف شد.`);
-    await bot.answerCallbackQuery(query.id, { text: 'درخواست حذف شد.' });
-    return;
-  }
+if (data.startsWith('delete_squadreq_') && userId === adminId) {
+  const reqId = data.replace('delete_squadreq_', '');
+  const req = await getSquadReq(reqId);
+  if (!req || req.deleted)
+    return bot.answerCallbackQuery(query.id, { text: 'درخواست پیدا نشد یا قبلا حذف شده.', show_alert: true });
+  await update(squadReqRef(reqId), { deleted: true });
+  await updatePoints(req.user_id, 5); // پنج سکه به کاربر برگردان
+  await bot.sendMessage(req.user_id, `درخواست اسکواد شما توسط مدیریت حذف شد و ۵ سکه به حساب شما بازگردانده شد.`);
+  await bot.answerCallbackQuery(query.id, { text: 'درخواست حذف شد و امتیاز بازگردانده شد.' });
+  return;
+}
 
   // ---- نمایش کارت اسکواد با ورق‌زنی (عمومی) ----
   if (data.startsWith('squad_card_')) {
@@ -931,8 +932,8 @@ async function showSquadCard(userId, reqs, idx, messageId) {
   if (idx < 0) idx = 0;
   if (idx >= reqs.length) idx = reqs.length - 1;
   const req = reqs[idx];
-  let txt = `🆔 اسکواد: ${req.squad_name}\nنقش مورد نیاز: ${req.roles_needed}\nآیدی تلگرام لیدر: ${req.game_id || '-'}\nرنک: ${req.min_rank}\nتوضیحات: ${req.details}\n`;
-  txt += `\nدرخواست‌دهنده: ${req.user_id}`;
+let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: ${req.roles_needed}\n👤آیدی تاگرام لیدر: ${req.game_id || '-'}\n🏅رنک: ${req.min_rank}\n📝توضیحات: ${req.details}\n`;
+  txt += `\n🖌️درخواست‌دهنده: ${req.user_id}`;
   let buttons = [];
   if (reqs.length > 1) {
     buttons = [
