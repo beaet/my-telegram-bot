@@ -371,6 +371,97 @@ bot.on('callback_query', async (query) => {
         }
       );
     }
+    
+      if (data === 'manage_dynamic_buttons' && userId === adminId) {
+    const buttons = await getDynamicButtons();
+    let msg = 'لیست دکمه‌های ساخته‌شده:\n\n';
+    if (buttons.length === 0) msg += 'هیچ دکمه‌ای ثبت نشده است.\n';
+    buttons.forEach((btn, i) => {
+      msg += `#${i + 1} - ${btn.text} (${btn.action === 'message' ? 'پیام' : 'اعلان'})\n`;
+    });
+    let keyboard = buttons.map((btn, i) =>
+      [{ text: btn.text, callback_data: `edit_dynbtn_${i}` }]
+    );
+    keyboard.push([{ text: '+ افزودن دکمه جدید', callback_data: 'add_dynamic_button' }]);
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, msg, { reply_markup: { inline_keyboard: keyboard } });
+  }
+  // ساخت دکمه پویا
+  if (data === 'add_dynamic_button' && userId === adminId) {
+    userState[userId] = { step: 'add_dynamic_button_name' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'اسم دکمه را وارد کنید:');
+  }
+  // پیام به کاربر خاص
+  if (data === 'send_user_message' && userId === adminId) {
+    userState[userId] = { step: 'enter_target_user_id_for_message' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'آیدی عددی کاربر مورد نظر را وارد کنید:');
+  }
+  // جزییات کاربران
+  if (data === 'users_list' && userId === adminId) {
+    const snap = await get(ref(db, 'users'));
+    const users = snap.exists() ? Object.values(snap.val()) : [];
+    let msg = 'لیست کاربران:\n\n';
+    let keyboard = [];
+    for (const u of users) {
+      const display = `${u.username ? `@${u.username} ` : ''}${u.user_id}`;
+      const url = u.username ? `https://t.me/${u.username}` : undefined;
+      if (url) {
+        keyboard.push([{ text: display, url }]);
+      } else {
+        keyboard.push([{ text: `${u.user_id}`, callback_data: `show_user_detail_${u.user_id}` }]);
+      }
+    }
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, msg, { reply_markup: { inline_keyboard: keyboard } });
+  }
+  if (data.startsWith('show_user_detail_') && userId === adminId) {
+    const uid = data.replace('show_user_detail_', '');
+    const u = await getUser(uid);
+    if (!u) return await bot.answerCallbackQuery(query.id, { text: 'کاربر یافت نشد', show_alert: true });
+    let info = `اطلاعات کاربر:\nآیدی: ${u.user_id}\nنام کاربری: ${u.username || '---'}\nامتیاز (سکه): ${u.points}\nتعداد دعوتی‌ها: ${u.invites}\nبن: ${u.banned ? 'بله' : 'خیر'}`;
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, info, {
+      reply_markup: {
+        inline_keyboard: [
+          ...(u.username ? [[{ text: `پیوی کاربر`, url: `https://t.me/${u.username}` }]] : []),
+          [{ text: 'بازگشت', callback_data: 'users_list' }]
+        ]
+      }
+    });
+  }
+  // دکمه پویا (منطق پاسخ)
+  if (data.startsWith('dynbtn_')) {
+    const btns = await getDynamicButtons();
+    const btn = btns.find(b => b.callback_data === data);
+    if (btn) {
+      if (btn.action === 'message') {
+        await bot.sendMessage(userId, btn.message);
+      } else if (btn.action === 'alert') {
+        await bot.answerCallbackQuery(query.id, { text: btn.message, show_alert: true });
+      }
+      return;
+    }
+  }
+  // نوع پاسخ دکمه پویا (از منوی انتخاب نوع)
+  const state = userState[userId];
+  if (state && (data === 'add_dynbtn_type_message' || data === 'add_dynbtn_type_alert')) {
+    const btn = {
+      text: state.name,
+      callback_data: `dynbtn_${Date.now()}`,
+      action: data === 'add_dynbtn_type_message' ? 'message' : 'alert',
+      message: state.reply
+    };
+    const dynamicBtns = await getDynamicButtons();
+    dynamicBtns.push(btn);
+    await setDynamicButtons(dynamicBtns);
+    userState[userId] = null;
+    await bot.sendMessage(userId, 'دکمه جدید با موفقیت اضافه شد.');
+    return;
+  }
+});
+
 
     // ---- بخش شانس ----
     if (data === 'chance') {
@@ -718,95 +809,6 @@ if (data.startsWith('delete_squadreq_') && userId === adminId) {
   // روشن/خاموش شدن ربات
 
   // مدیریت دکمه‌های پویا
-  if (data === 'manage_dynamic_buttons' && userId === adminId) {
-    const buttons = await getDynamicButtons();
-    let msg = 'لیست دکمه‌های ساخته‌شده:\n\n';
-    if (buttons.length === 0) msg += 'هیچ دکمه‌ای ثبت نشده است.\n';
-    buttons.forEach((btn, i) => {
-      msg += `#${i + 1} - ${btn.text} (${btn.action === 'message' ? 'پیام' : 'اعلان'})\n`;
-    });
-    let keyboard = buttons.map((btn, i) =>
-      [{ text: btn.text, callback_data: `edit_dynbtn_${i}` }]
-    );
-    keyboard.push([{ text: '+ افزودن دکمه جدید', callback_data: 'add_dynamic_button' }]);
-    await bot.answerCallbackQuery(query.id);
-    return bot.sendMessage(userId, msg, { reply_markup: { inline_keyboard: keyboard } });
-  }
-  // ساخت دکمه پویا
-  if (data === 'add_dynamic_button' && userId === adminId) {
-    userState[userId] = { step: 'add_dynamic_button_name' };
-    await bot.answerCallbackQuery(query.id);
-    return bot.sendMessage(userId, 'اسم دکمه را وارد کنید:');
-  }
-  // پیام به کاربر خاص
-  if (data === 'send_user_message' && userId === adminId) {
-    userState[userId] = { step: 'enter_target_user_id_for_message' };
-    await bot.answerCallbackQuery(query.id);
-    return bot.sendMessage(userId, 'آیدی عددی کاربر مورد نظر را وارد کنید:');
-  }
-  // جزییات کاربران
-  if (data === 'users_list' && userId === adminId) {
-    const snap = await get(ref(db, 'users'));
-    const users = snap.exists() ? Object.values(snap.val()) : [];
-    let msg = 'لیست کاربران:\n\n';
-    let keyboard = [];
-    for (const u of users) {
-      const display = `${u.username ? `@${u.username} ` : ''}${u.user_id}`;
-      const url = u.username ? `https://t.me/${u.username}` : undefined;
-      if (url) {
-        keyboard.push([{ text: display, url }]);
-      } else {
-        keyboard.push([{ text: `${u.user_id}`, callback_data: `show_user_detail_${u.user_id}` }]);
-      }
-    }
-    await bot.answerCallbackQuery(query.id);
-    return bot.sendMessage(userId, msg, { reply_markup: { inline_keyboard: keyboard } });
-  }
-  if (data.startsWith('show_user_detail_') && userId === adminId) {
-    const uid = data.replace('show_user_detail_', '');
-    const u = await getUser(uid);
-    if (!u) return await bot.answerCallbackQuery(query.id, { text: 'کاربر یافت نشد', show_alert: true });
-    let info = `اطلاعات کاربر:\nآیدی: ${u.user_id}\nنام کاربری: ${u.username || '---'}\nامتیاز (سکه): ${u.points}\nتعداد دعوتی‌ها: ${u.invites}\nبن: ${u.banned ? 'بله' : 'خیر'}`;
-    await bot.answerCallbackQuery(query.id);
-    return bot.sendMessage(userId, info, {
-      reply_markup: {
-        inline_keyboard: [
-          ...(u.username ? [[{ text: `پیوی کاربر`, url: `https://t.me/${u.username}` }]] : []),
-          [{ text: 'بازگشت', callback_data: 'users_list' }]
-        ]
-      }
-    });
-  }
-  // دکمه پویا (منطق پاسخ)
-  if (data.startsWith('dynbtn_')) {
-    const btns = await getDynamicButtons();
-    const btn = btns.find(b => b.callback_data === data);
-    if (btn) {
-      if (btn.action === 'message') {
-        await bot.sendMessage(userId, btn.message);
-      } else if (btn.action === 'alert') {
-        await bot.answerCallbackQuery(query.id, { text: btn.message, show_alert: true });
-      }
-      return;
-    }
-  }
-  // نوع پاسخ دکمه پویا (از منوی انتخاب نوع)
-  const state = userState[userId];
-  if (state && (data === 'add_dynbtn_type_message' || data === 'add_dynbtn_type_alert')) {
-    const btn = {
-      text: state.name,
-      callback_data: `dynbtn_${Date.now()}`,
-      action: data === 'add_dynbtn_type_message' ? 'message' : 'alert',
-      message: state.reply
-    };
-    const dynamicBtns = await getDynamicButtons();
-    dynamicBtns.push(btn);
-    await setDynamicButtons(dynamicBtns);
-    userState[userId] = null;
-    await bot.sendMessage(userId, 'دکمه جدید با موفقیت اضافه شد.');
-    return;
-  }
-});
 
 // ---- اداره مراحل ثبت اسکواد ----
 // ... ناحیه message handler بدون تغییر، فقط بخش stateهای جدید اضافه شود
