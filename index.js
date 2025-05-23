@@ -322,21 +322,18 @@ bot.on('callback_query', async (query) => {
 
   try {
     // ---- Anti-Spam ----
-    if (userId !== adminId) {
-      if (isMuted(userId)) {
-        await bot.answerCallbackQuery(query.id, {
-          text: '🚫 به دلیل اسپم کردن دکمه‌ها، تا پانزده دقیقه نمی‌توانید از ربات استفاده کنید.',
-          show_alert: true
-        });
-        return;
-      }
+    if (userId !== adminId && isMuted(userId)) {
+      await bot.answerCallbackQuery(query.id, {
+        text: '🚫 به دلیل اسپم کردن دکمه‌ها، تا پانزده دقیقه نمی‌توانید از ربات استفاده کنید.',
+        show_alert: true
+      });
+      return;
     }
 
     // ---- Main menu back ----
     if (data === 'main_menu') {
       await bot.answerCallbackQuery(query.id);
-      sendMainMenu(userId, messageId);
-      return;
+      return sendMainMenu(userId, messageId);
     }
 
     const user = await getUser(userId);
@@ -348,7 +345,124 @@ bot.on('callback_query', async (query) => {
       return await bot.answerCallbackQuery(query.id, { text: 'شما بن شده‌اید و اجازه استفاده ندارید.', show_alert: true });
     }
 
-    // سایر دستورات مربوط به callback ها را می‌توان اینجا اضافه کرد...
+    // ---- لیست پیک/بن ----
+    if (data === 'pickban_list') {
+      await bot.answerCallbackQuery(query.id);
+      return bot.sendMessage(userId,
+        'جهت مشاهده لیست بیشترین پیک ریت و بن در این سیزن روی دکمه زیر کلیک کنید:',
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: 'مشاهده در سایت رسمی', url: 'https://www.mobilelegends.com/rank' }],
+              [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
+            ]
+          }
+        }
+      );
+    }
+
+    // ---- بخش شانس ----
+    if (data === 'chance') {
+      await bot.answerCallbackQuery(query.id);
+      return bot.sendMessage(userId, '🍀 شانست رو انتخاب کن!\n\n🎲 اگر تاس بندازی و ۶ بیاد: ۲ امتیاز می‌گیری\n⚽ اگر پنالتی بزنی و گل بشه (GOAL): ۱ امتیاز می‌گیری\n🎯 اگر دارت بزنی و وسط هدف (BULLSEYE) بزنی: ۱ امتیاز می‌گیری\n\nیک گزینه رو انتخاب کن', {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: '🎲 تاس', callback_data: 'chance_dice' },
+              { text: '⚽ فوتبال', callback_data: 'chance_football' },
+              { text: '🎯 دارت', callback_data: 'chance_dart' }
+            ],
+            [
+              { text: 'بازگشت 🔙', callback_data: 'main_menu' }
+            ]
+          ]
+        }
+      });
+    }
+
+    if (data === 'chance_dice' || data === 'chance_football' || data === 'chance_dart') {
+      const now = Date.now();
+      const lastUse = user.last_chance_use || 0;
+      if (userId !== adminId && now - lastUse < 24 * 60 * 60 * 1000) {
+        await bot.answerCallbackQuery(query.id, { text: 'تا ۲۴ ساعت آینده نمی‌تونی دوباره امتحان کنی.', show_alert: true });
+        return;
+      }
+
+      let emoji, winValue, prize, readable;
+      if (data === 'chance_dice') {
+        emoji = '🎲'; winValue = 6; prize = 2; readable = 'عدد ۶';
+      } else if (data === 'chance_football') {
+        emoji = '⚽'; winValue = 3; prize = 1; readable = 'GOAL';
+      } else if (data === 'chance_dart') {
+        emoji = '🎯'; winValue = 6; prize = 1; readable = 'BULLSEYE';
+      }
+
+      const diceMsg = await bot.sendDice(userId, { emoji });
+      let isWin = diceMsg.dice.value === winValue;
+      if (userId !== adminId) await updateLastChanceUse(userId, now);
+      if (isWin) {
+        await updatePoints(userId, prize);
+        await bot.sendMessage(userId, `تبریک! شانست گرفت و (${readable}) اومد و ${prize} امتیاز گرفتی!`);
+      } else {
+        await bot.sendMessage(userId, `متاسفانه شانست نگرفت 😞 دوباره فردا امتحان کن!`);
+      }
+      userState[userId] = null;
+      return;
+    }
+
+    // ---- اسکواد: ثبت درخواست ----
+    if (data === 'squad_request') {
+      userState[userId] = { step: 'squad_name' };
+      await bot.answerCallbackQuery(query.id);
+      return bot.sendMessage(userId, 'نام اسکواد خود را وارد کنید:');
+    }
+
+    if (data === 'view_squads') {
+      const approvedReqs = await getAllSquadReqs({ approved: true });
+      if (approvedReqs.length == 0) {
+        const opts = {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
+            ]
+          }
+        };
+        if (messageId) {
+          await bot.editMessageText('هیچ اسکواد فعالی وجود ندارد.', {
+            chat_id: userId,
+            message_id: messageId,
+            ...opts
+          });
+        } else {
+          await bot.sendMessage(userId, 'هیچ اسکواد فعالی وجود ندارد.', opts);
+        }
+        await bot.answerCallbackQuery(query.id);
+        return;
+      }
+      showSquadCard(userId, approvedReqs, 0, messageId);
+      await bot.answerCallbackQuery(query.id);
+      return;
+    }
+
+    // ---- مدیریت اسکواد (ادمین) ----
+    if (data === 'admin_squad_list' && userId === adminId) {
+      const pendingReqs = await getAllSquadReqs({ approved: false });
+      if (!pendingReqs.length) {
+        await bot.answerCallbackQuery(query.id);
+        return bot.sendMessage(userId, 'درخواستی برای بررسی وجود ندارد.');
+      }
+      showAdminSquadCard(userId, pendingReqs, 0);
+      await bot.answerCallbackQuery(query.id);
+      return;
+    }
+
+    if (data.startsWith('admin_squad_card_') && userId === adminId) {
+      const idx = parseInt(data.replace('admin_squad_card_', ''));
+      const pendingReqs = await getAllSquadReqs({ approved: false });
+      showAdminSquadCard(userId, pendingReqs, idx);
+      await bot.answerCallbackQuery(query.id);
+      return;
+    }
 
   } catch (error) {
     console.error('خطا در callback_query:', error);
@@ -362,128 +476,6 @@ bot.on('callback_query', async (query) => {
     }
   }
 });
-
-  // ---- لیست پیک/بن ----
-  if (data === 'pickban_list') {
-    await bot.answerCallbackQuery(query.id);
-    return bot.sendMessage(userId,
-      'جهت مشاهده لیست بیشترین پیک ریت و بن در این سیزن روی دکمه زیر کلیک کنید:',
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: 'مشاهده در سایت رسمی', url: 'https://www.mobilelegends.com/rank' }],
-            [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
-          ]
-        }
-      }
-    );
-  }
-
-  // ... ادامه تمامی if (data === ...) و switch (data) همان جا قرار بگیرد
-
-  // آخرین خط این تابع:
-});
-
-  // ---- بخش شانس ----
-  if (data === 'chance') {
-    await bot.answerCallbackQuery(query.id);
-    return bot.sendMessage(userId, '🍀 شانست رو انتخاب کن!\n\n🎲 اگر تاس بندازی و ۶ بیاد: ۲ امتیاز می‌گیری\n⚽ اگر پنالتی بزنی و گل بشه (GOAL): ۱ امتیاز می‌گیری\n🎯 اگر دارت بزنی و وسط هدف (BULLSEYE) بزنی: ۱ امتیاز می‌گیری\n\nیک گزینه رو انتخاب کن', {
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: '🎲 تاس', callback_data: 'chance_dice' },
-            { text: '⚽ فوتبال', callback_data: 'chance_football' },
-            { text: '🎯 دارت', callback_data: 'chance_dart' }
-          ],
-          [
-            { text: 'بازگشت 🔙', callback_data: 'main_menu' }
-          ]
-        ]
-      }
-    });
-  }
-  if (data === 'chance_dice' || data === 'chance_football' || data === 'chance_dart') {
-    const now = Date.now();
-    const lastUse = user.last_chance_use || 0;
-    if (userId !== adminId && now - lastUse < 24 * 60 * 60 * 1000) {
-      await bot.answerCallbackQuery(query.id, { text: 'تا ۲۴ ساعت آینده نمی‌تونی دوباره امتحان کنی.', show_alert: true });
-      return;
-    }
-    let emoji, winValue, prize, readable;
-    if (data === 'chance_dice') {
-      emoji = '🎲'; winValue = 6; prize = 2; readable = 'عدد ۶';
-    } else if (data === 'chance_football') {
-      emoji = '⚽'; winValue = 3; prize = 1; readable = 'GOAL';
-    } else if (data === 'chance_dart') {
-      emoji = '🎯'; winValue = 6; prize = 1; readable = 'BULLSEYE';
-    }
-    const diceMsg = await bot.sendDice(userId, { emoji });
-    let isWin = diceMsg.dice.value === winValue;
-    if (userId !== adminId) await updateLastChanceUse(userId, now);
-    if (isWin) {
-      await updatePoints(userId, prize);
-      await bot.sendMessage(userId, `تبریک! شانست گرفت و (${readable}) اومد و ${prize} امتیاز گرفتی!`);
-    } else {
-      await bot.sendMessage(userId, `متاسفانه شانست نگرفت 😞 دوباره فردا امتحان کن!`);
-    }
-    userState[userId] = null;
-    return;
-  }
-
-  // ---- اسکواد: ثبت درخواست ----
-  if (data === 'squad_request') {
-    userState[userId] = { step: 'squad_name' };
-    await bot.answerCallbackQuery(query.id);
-    return bot.sendMessage(userId, 'نام اسکواد خود را وارد کنید:');
-  }
-  if (data === 'view_squads') {
-    const approvedReqs = await getAllSquadReqs({ approved: true });
-    if (approvedReqs.length == 0) {
-      if (messageId) {
-        await bot.editMessageText('هیچ اسکواد فعالی وجود ندارد.', {
-          chat_id: userId,
-          message_id: messageId,
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
-            ]
-          }
-        });
-      } else {
-        await bot.sendMessage(userId, 'هیچ اسکواد فعالی وجود ندارد.', {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
-            ]
-          }
-        });
-      }
-      await bot.answerCallbackQuery(query.id);
-      return;
-    }
-    showSquadCard(userId, approvedReqs, 0, messageId);
-    await bot.answerCallbackQuery(query.id);
-    return;
-  }
-
-  // ---- مدیریت اسکواد: تایید نشده (ادمین) ----
-  if (data === 'admin_squad_list' && userId === adminId) {
-    const pendingReqs = await getAllSquadReqs({ approved: false });
-    if (!pendingReqs.length) {
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'درخواستی برای بررسی وجود ندارد.');
-    }
-    showAdminSquadCard(userId, pendingReqs, 0);
-    await bot.answerCallbackQuery(query.id);
-    return;
-  }
-  if (data.startsWith('admin_squad_card_') && userId === adminId) {
-    const idx = parseInt(data.replace('admin_squad_card_', ''));
-    const pendingReqs = await getAllSquadReqs({ approved: false });
-    showAdminSquadCard(userId, pendingReqs, idx);
-    await bot.answerCallbackQuery(query.id);
-    return;
-  }
 
   // ---- مدیریت اسکواد: حذف اسکواد تایید شده (ادمین) ----
   if (data === 'admin_delete_approved_squads' && userId === adminId) {
