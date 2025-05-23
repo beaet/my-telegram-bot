@@ -326,7 +326,14 @@ bot.on('callback_query', async (query) => {
   // ---- بخش شانس ----
   if (data === 'chance') {
     await bot.answerCallbackQuery(query.id);
-    return bot.sendMessage(userId, 'نوع شانس خود را انتخاب کن:', {
+    return bot.sendMessage(userId, '🍀 شانست رو انتخاب کن!
+
+
+🎲 اگر تاس بندازی و ۶ بیاد: ۲ امتیاز می‌گیری
+⚽ اگر پنالتی بزنی و گل بشه (GOAL): ۱ امتیاز می‌گیری
+🎯 اگر دارت بزنی و وسط هدف (BULLSEYE) بزنی: ۱ امتیاز می‌گیری
+
+یک گزینه رو انتخاب کن:', {
       reply_markup: {
         inline_keyboard: [
           [
@@ -700,7 +707,7 @@ bot.on('message', async (msg) => {
           for (let i = 0; i < activeUsers.length; i += batchSize) {
             const batch = activeUsers.slice(i, i + batchSize);
             await Promise.all(batch.map(u =>
-              bot.sendMessage(u.user_id, `📢 امتیاز ${amount} از طرف پنل مدیریت به حساب شما افزوده شد.`).catch(() => {})
+              bot.sendMessage(u.user_id, `📢 امتیاز ${amount} از طرف پنل مدیریت به حساب همه افزوده شد.`).catch(() => {})
             ));
             await new Promise(res => setTimeout(res, 1000));
           }
@@ -823,7 +830,7 @@ bot.on('message', async (msg) => {
   if (state.step === 'squad_roles') {
     state.roles_needed = text;
     state.step = 'game_id';
-    return bot.sendMessage(userId, 'آیدی بازی خود را وارد کنید (مثال: 12345678 (1234)):');
+    return bot.sendMessage(userId, 'آیدی تلگرام لیدر');
   }
   if (state.step === 'game_id') {
     state.game_id = text;
@@ -843,7 +850,7 @@ bot.on('message', async (msg) => {
     }
     userState[userId] = { step: 'confirm_squad_req', ...state };
     return bot.sendMessage(userId,
-      `درخواست شما:\n\nاسکواد: ${state.squad_name}\nنقش مورد نیاز: ${state.roles_needed}\nآیدی بازی: ${state.game_id}\nحداقل رنک: ${state.min_rank}\nتوضیحات: ${state.details}\n\nبا ثبت درخواست ۵ امتیاز از شما کسر می‌شود. تایید می‌کنید؟`,
+      `درخواست شما:\n\nاسکواد: ${state.squad_name}\nنقش مورد نیاز: ${state.roles_needed}\nآیدی تلگرام لیدر: ${state.game_id}\nحداقل رنک: ${state.min_rank}\nتوضیحات: ${state.details}\n\nبا ثبت درخواست ۵ امتیاز از شما کسر می‌شود. تایید می‌کنید؟`,
       {
         reply_markup: {
           inline_keyboard: [
@@ -882,7 +889,7 @@ async function showSquadCard(userId, reqs, idx, messageId) {
   if (idx < 0) idx = 0;
   if (idx >= reqs.length) idx = reqs.length - 1;
   const req = reqs[idx];
-  let txt = `🆔 اسکواد: ${req.squad_name}\nنقش مورد نیاز: ${req.roles_needed}\nآیدی بازی: ${req.game_id || '-'}\nرنک: ${req.min_rank}\nتوضیحات: ${req.details}\n`;
+  let txt = `🆔 اسکواد: ${req.squad_name}\nنقش مورد نیاز: ${req.roles_needed}\nآیدی تلگرام لیدر: ${req.game_id || '-'}\nرنک: ${req.min_rank}\nتوضیحات: ${req.details}\n`;
   txt += `\nدرخواست‌دهنده: ${req.user_id}`;
   let buttons = [];
   if (reqs.length > 1) {
@@ -919,7 +926,7 @@ async function showAdminSquadCard(userId, reqs, idx) {
   if (idx < 0) idx = 0;
   if (idx >= reqs.length) idx = reqs.length - 1;
   const req = reqs[idx];
-  let txt = `🆔 اسکواد: ${req.squad_name}\nنقش مورد نیاز: ${req.roles_needed}\nآیدی بازی: ${req.game_id || '-'}\nرنک: ${req.min_rank}\nتوضیحات: ${req.details}\n`;
+  let txt = `🆔 اسکواد: ${req.squad_name}\nنقش مورد نیاز: ${req.roles_needed}\nآیدی تاگرام لیدر: ${req.game_id || '-'}\nرنک: ${req.min_rank}\nتوضیحات: ${req.details}\n`;
   txt += `\nدرخواست‌دهنده: ${req.user_id}`;
   const navBtns = [];
   if (idx > 0) navBtns.push({ text: '⬅️ قبلی', callback_data: `admin_squad_card_${idx - 1}` });
