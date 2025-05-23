@@ -292,25 +292,20 @@ bot.onText(/\/panel/, async (msg) => {
 bot.on('callback_query', async (query) => {
   const userId = query.from.id;
   const data = query.data;
-  const messageId = query.message && query.message.message_id;
-  
+  // ...
+
   if (data.startsWith('delete_squadreq_') && userId === adminId) {
-  (async () => {
     const reqId = data.replace('delete_squadreq_', '');
     const req = await getSquadReq(reqId);
-  if (!req || req.deleted)
-    return bot.answerCallbackQuery(query.id, { text: 'درخواست پیدا نشد یا قبلا حذف شده.', show_alert: true });
-  await update(squadReqRef(reqId), { deleted: true });
-  await updatePoints(req.user_id, 5); // پنج سکه به کاربر برگردان
-  await bot.sendMessage(req.user_id, `درخواست اسکواد شما توسط مدیریت حذف شد و ۵ سکه به حساب شما بازگردانده شد.`);
-  await bot.answerCallbackQuery(query.id, { text: 'درخواست حذف شد و امتیاز بازگردانده شد.' });
-  return;
-}
-
-    // ادامه کد...
-  })();
-}
-
+    if (!req || req.deleted)
+      return bot.answerCallbackQuery(query.id, { text: 'درخواست پیدا نشد یا قبلا حذف شده.', show_alert: true });
+    await update(squadReqRef(reqId), { deleted: true });
+    await updatePoints(req.user_id, 5);
+    await bot.sendMessage(req.user_id, `درخواست اسکواد شما توسط مدیریت حذف شد و ۵ سکه به حساب شما بازگردانده شد.`);
+    await bot.answerCallbackQuery(query.id, { text: 'درخواست حذف شد و امتیاز بازگردانده شد.' });
+    return;
+  }
+  
   // ---- Anti-Spam ----
   if (userId !== adminId) {
     if (isMuted(userId)) {
