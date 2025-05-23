@@ -1218,4 +1218,4 @@ let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: $
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
-}); و 
+}); 
