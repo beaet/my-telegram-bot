@@ -18,7 +18,7 @@ const firebaseConfig = {
 };
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getDatabase(firebaseApp);
-
+const userState = {};
 // ---- User Helper Functions ----
 const userRef = userId => ref(db, `users/${userId}`);
 async function ensureUser(user) {
