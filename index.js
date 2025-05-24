@@ -416,13 +416,6 @@ bot.on('callback_query', async (query) => {
     userState[userId] = null;
     return;
   }
-  
-  } else if (data === 'squad_request') {
-    // کد ثبت اسکواد
-  }
-  // ... بقیه شرط‌ها
-
-});  // <-- این } پایانی هندلر باید باشه
 
   // ---- اسکواد: ثبت درخواست ----
   if (data === 'squad_request') {
