@@ -226,6 +226,10 @@ function sendMainMenu(userId, messageId = null, currentText = null, currentMarku
 bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
   const userId = msg.from.id;
   const refId = match[1] ? parseInt(match[1]) : null;
+  
+  if (!botActive && msg.from.id !== adminId) {
+    return bot.sendMessage(msg.from.id, "ربات موقتاً خاموش است.");
+  }
 
   await ensureUser(msg.from);
   const user = await getUser(userId);
@@ -323,6 +327,13 @@ bot.on('callback_query', async (query) => {
   const messageId = query.message && query.message.message_id;
   const currentText = query.message.text;
   const currentMarkup = query.message.reply_markup || null;
+  
+  bot.on('callback_query', async (query) => {
+  if (!botActive && query.from.id !== adminId) {
+    await bot.answerCallbackQuery(query.id, { text: 'ربات موقتاً خاموش است.', show_alert: true });
+    return;
+  }
+  // ادامه کد قبلی...
 
   // فرض بر این که می‌خواهی منوی اصلی را نمایش بدهی
   
@@ -738,7 +749,11 @@ bot.on('message', async (msg) => {
   const text = msg.text || '';
   if (!userState[userId] && userId !== adminId) return;
   const user = await getUser(userId);
-
+  
+if (!botActive && msg.from.id !== adminId) {
+    return bot.sendMessage(msg.from.id, "ربات موقتاً خاموش است.");
+  }
+  
   if (user?.banned) {
     return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده ندارید.');
   }
@@ -1089,4 +1104,4 @@ app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
 
-})();
+})(); 
