@@ -191,28 +191,21 @@ function mainMenuKeyboard() {
     }
   };
 }
-function sendMainMenu(userId, messageId = null) {
+function sendMainMenu(userId, messageId = null, currentText = null, currentMarkup = null) {
   const text = 'سلام، به ربات محاسبه‌گر Mobile Legends خوش آمدید ✨';
+  const { reply_markup } = mainMenuKeyboard();
+
   if (messageId) {
-    try {
+    // فقط اگر متن یا مارکاپ تغییر کرده باشد ویرایش کن
+    if (text !== currentText || JSON.stringify(reply_markup) !== JSON.stringify(currentMarkup)) {
       bot.editMessageText(text, {
         chat_id: userId,
         message_id: messageId,
-        ...mainMenuKeyboard()
+        reply_markup
       });
-    } catch (e) {
-      if (
-        e.response &&
-        e.response.body &&
-        e.response.body.description === 'Bad Request: message is not modified'
-      ) {
-        // نادیده گرفتن خطای مشابه بودن پیام
-      } else {
-        console.error('خطا در editMessageText:', e);
-      }
     }
   } else {
-    bot.sendMessage(userId, text, mainMenuKeyboard());
+    bot.sendMessage(userId, text, { reply_markup });
   }
 }
 
@@ -297,6 +290,10 @@ bot.on('callback_query', async (query) => {
   const userId = query.from.id;
   const data = query.data;
   const messageId = query.message && query.message.message_id;
+  const currentText = query.message.text;
+  const currentMarkup = query.message.reply_markup || null;
+
+  // فرض بر این که می‌خواهی منوی اصلی را نمایش بدهی
   
     if (data === 'deactivate_bot' && userId === adminId) {
     botActive = false;
@@ -416,33 +413,32 @@ bot.on('callback_query', async (query) => {
   if (data === 'view_squads') {
     const approvedReqs = await getAllSquadReqs({ approved: true });
     if (approvedReqs.length == 0) {
-if (messageId) {
-  try {
-    await bot.editMessageText('هیچ اسکواد فعالی وجود ندارد.', {
-      chat_id: userId,
-      message_id: messageId,
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
-        ]
+      if (messageId) {
+        await bot.editMessageText('هیچ اسکواد فعالی وجود ندارد.', {
+          chat_id: userId,
+          message_id: messageId,
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
+            ]
+          }
+        });
+      } else {
+        await bot.sendMessage(userId, 'هیچ اسکواد فعالی وجود ندارد.', {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
+            ]
+          }
+        });
       }
-    });
-  } catch (e) {
-    if (
-      e.response?.body?.description !== 'Bad Request: message is not modified'
-    ) {
-      console.error('خطا در editMessageText:', e);
+      await bot.answerCallbackQuery(query.id);
+      return;
     }
+    showSquadCard(userId, approvedReqs, 0, messageId);
+    await bot.answerCallbackQuery(query.id);
+    return;
   }
-} else {
-  await bot.sendMessage(userId, 'هیچ اسکواد فعالی وجود ندارد.', {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
-      ]
-    }
-  });
-}
 
   // ---- مدیریت اسکواد: تایید نشده (ادمین) ----
   if (data === 'admin_squad_list' && userId === adminId) {
@@ -678,16 +674,16 @@ if (data.startsWith('delete_squadreq_') && userId === adminId) {
         return;
       }
       const snap = await get(ref(db, 'users'));
-const users = snap.exists() ? Object.values(snap.val()) : [];
-const activeUsers = users.filter(u => !u.banned);
-const bannedUsers = users.filter(u => u.banned);
-await bot.answerCallbackQuery(query.id);
-await bot.sendMessage(userId, `👥 کاربران کل: ${users.length}\n✅ کاربران فعال: ${activeUsers.length}\n⛔ کاربران بن شده: ${bannedUsers.length}`);
-break; // اضافه‌شده
-
-default:
-  await bot.answerCallbackQuery(query.id);
-  break;
+      const users = snap.exists() ? Object.values(snap.val()) : [];
+      const activeUsers = users.filter(u => !u.banned);
+      const bannedUsers = users.filter(u => u.banned);
+      await bot.answerCallbackQuery(query.id);
+      return bot.sendMessage(userId, `👥 کاربران کل: ${users.length}\n✅ کاربران فعال: ${activeUsers.length}\n⛔ کاربران بن شده: ${bannedUsers.length}`);
+    default:
+      await bot.answerCallbackQuery(query.id);
+      break;
+  }
+});
 
 // ---- اداره مراحل ثبت اسکواد ----
 // ... ناحیه message handler بدون تغییر، فقط بخش stateهای جدید اضافه شود
@@ -965,11 +961,10 @@ async function showSquadCard(userId, reqs, idx, messageId) {
       });
     }
   }
-
   if (idx < 0) idx = 0;
   if (idx >= reqs.length) idx = reqs.length - 1;
   const req = reqs[idx];
-  let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: ${req.roles_needed}\n👤آیدی تاگرام لیدر: ${req.game_id || '-'}\n🏅رنک: ${req.min_rank}\n📝توضیحات: ${req.details}\n`;
+let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: ${req.roles_needed}\n👤آیدی تاگرام لیدر: ${req.game_id || '-'}\n🏅رنک: ${req.min_rank}\n📝توضیحات: ${req.details}\n`;
   txt += `\n🖌️درخواست‌دهنده: ${req.user_id}`;
   let buttons = [];
   if (reqs.length > 1) {
@@ -983,29 +978,21 @@ async function showSquadCard(userId, reqs, idx, messageId) {
   }
 
   if (messageId) {
-    try {
-      await bot.editMessageText(txt, {
-        chat_id: userId,
-        message_id: messageId,
-        reply_markup: {
-          inline_keyboard: [buttons]
-        }
-      });
-    } catch (e) {
-      if (
-        e.response?.body?.description !== 'Bad Request: message is not modified'
-      ) {
-        console.error('خطا در editMessageText:', e);
+    bot.editMessageText(txt, {
+      chat_id: userId,
+      message_id: messageId,
+      reply_markup: {
+        inline_keyboard: [buttons]
       }
-    }
+    });
   } else {
-    await bot.sendMessage(userId, txt, {
+    bot.sendMessage(userId, txt, {
       reply_markup: {
         inline_keyboard: [buttons]
       }
     });
   }
-} // <-- این } باید اضافه بشه
+}
 
 // ---- نمایش کارت اسکواد ادمین با ورق‌زنی و دکمه تایید/حذف ----
 async function showAdminSquadCard(userId, reqs, idx) {
