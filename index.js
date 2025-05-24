@@ -333,11 +333,6 @@ bot.on('callback_query', async (query) => {
   const currentText = query.message.text;
   const currentMarkup = query.message.reply_markup || null;
 
-  // بقیه کد همین تابع (همه‌ی سوییچ‌ها، ifها و ...)
-
-});
-  // ادامه کد قبلی...
-
   // فرض بر این که می‌خواهی منوی اصلی را نمایش بدهی
   
 if (data === 'deactivate_bot' && userId === adminId) {
