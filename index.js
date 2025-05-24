@@ -179,7 +179,6 @@ function isMuted(userId) {
 }
 
 // ---- User State ----
-const userState = {};
 const supportChatMap = {};
 
 // ---- Bot Init ----
