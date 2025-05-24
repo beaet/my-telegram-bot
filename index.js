@@ -240,16 +240,6 @@ bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
   sendMainMenu(userId);
 });
 
-bot.on('message', async (msg) => {
-  const userId = msg.from.id;
-  const text = msg.text || '';
-  if (!botActive && userId !== adminId) return;
-
-  const state = userState[userId];
-  if (!state || !state.step) return; // اگر کاربر در فرآیند خاصی نیست، رد شو
-
-  console.log('User message:', userId, text, state);
-
 
 // ---- Panel for admin ----
 bot.onText(/\/panel/, async (msg) => {
@@ -703,6 +693,15 @@ bot.on('callback_query', async (query) => {
     default:
       await bot.answerCallbackQuery(query.id);
       break;
+  }
+bot.on('message', async (msg) => {
+  const userId = msg.from.id;
+  const text = msg.text || '';
+  if (!userState[userId] && userId !== adminId) return;
+  const user = await getUser(userId);
+
+  if (user?.banned) {
+    return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده ندارید.');
   }
 
   // ---- پاسخ به پشتیبانی توسط ادمین ----
