@@ -1150,7 +1150,9 @@ bot.on('message', async (msg) => {
 });
 
 // ---- نمایش کارت اسکواد با ورق‌زنی (عمومی) ----
- showSquadCard(userId, reqs, idx, messageId) {
+ function showSquadCard(userId, reqs, idx, messageId) {
+  // کدت اینجا
+}
   if (reqs.length === 0) {
     if (messageId) {
       return bot.editMessageText('هیچ اسکوادی وجود ندارد.', {
