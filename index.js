@@ -191,16 +191,29 @@ function mainMenuKeyboard() {
     }
   };
 }
-function sendMainMenu(userId, messageId = null) {
+async function sendMainMenu(userId, messageId = null) {
   const text = 'سلام، به ربات محاسبه‌گر Mobile Legends خوش آمدید ✨';
   if (messageId) {
-    bot.editMessageText(text, {
-      chat_id: userId,
-      message_id: messageId,
-      ...mainMenuKeyboard()
-    });
+    try {
+      await bot.editMessageText(text, {
+        chat_id: userId,
+        message_id: messageId,
+        ...mainMenuKeyboard()
+      });
+    } catch (e) {
+      if (
+        e.response &&
+        e.response.body &&
+        e.response.body.description &&
+        e.response.body.description.includes('message is not modified')
+      ) {
+        // نادیده بگیر
+      } else {
+        throw e;
+      }
+    }
   } else {
-    bot.sendMessage(userId, text, mainMenuKeyboard());
+    await bot.sendMessage(userId, text, mainMenuKeyboard());
   }
 }
 
@@ -229,8 +242,12 @@ bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
 
 bot.on('message', async (msg) => {
   const userId = msg.from.id;
+  const text = msg.text || '';
   if (!botActive && userId !== adminId) return;
-  // ... ادامه
+
+  // دیباگ state (اختیاری ولی مفید برای تست)
+  console.log('User message:', userId, text, userState[userId]);
+
 });
 
 // ---- Panel for admin ----
@@ -932,17 +949,30 @@ bot.on('callback_query', async (query) => {
 async function showSquadCard(userId, reqs, idx, messageId) {
   if (reqs.length === 0) {
     if (messageId) {
-      return bot.editMessageText('هیچ اسکوادی وجود ندارد.', {
-        chat_id: userId,
-        message_id: messageId,
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
-          ]
+      try {
+        await bot.editMessageText('هیچ اسکوادی وجود ندارد.', {
+          chat_id: userId,
+          message_id: messageId,
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
+            ]
+          }
+        });
+      } catch (e) {
+        if (
+          e.response &&
+          e.response.body &&
+          e.response.body.description &&
+          e.response.body.description.includes('message is not modified')
+        ) {
+          // نادیده بگیر
+        } else {
+          throw e;
         }
-      });
+      }
     } else {
-      return bot.sendMessage(userId, 'هیچ اسکوادی وجود ندارد.', {
+      await bot.sendMessage(userId, 'هیچ اسکوادی وجود ندارد.', {
         reply_markup: {
           inline_keyboard: [
             [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
@@ -950,11 +980,12 @@ async function showSquadCard(userId, reqs, idx, messageId) {
         }
       });
     }
+    return;
   }
   if (idx < 0) idx = 0;
   if (idx >= reqs.length) idx = reqs.length - 1;
   const req = reqs[idx];
-let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: ${req.roles_needed}\n👤آیدی تاگرام لیدر: ${req.game_id || '-'}\n🏅رنک: ${req.min_rank}\n📝توضیحات: ${req.details}\n`;
+  let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: ${req.roles_needed}\n👤آیدی تاگرام لیدر: ${req.game_id || '-'}\n🏅رنک: ${req.min_rank}\n📝توضیحات: ${req.details}\n`;
   txt += `\n🖌️درخواست‌دهنده: ${req.user_id}`;
   let buttons = [];
   if (reqs.length > 1) {
@@ -968,15 +999,28 @@ let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: $
   }
 
   if (messageId) {
-    bot.editMessageText(txt, {
-      chat_id: userId,
-      message_id: messageId,
-      reply_markup: {
-        inline_keyboard: [buttons]
+    try {
+      await bot.editMessageText(txt, {
+        chat_id: userId,
+        message_id: messageId,
+        reply_markup: {
+          inline_keyboard: [buttons]
+        }
+      });
+    } catch (e) {
+      if (
+        e.response &&
+        e.response.body &&
+        e.response.body.description &&
+        e.response.body.description.includes('message is not modified')
+      ) {
+        // نادیده بگیر
+      } else {
+        throw e;
       }
-    });
+    }
   } else {
-    bot.sendMessage(userId, txt, {
+    await bot.sendMessage(userId, txt, {
       reply_markup: {
         inline_keyboard: [buttons]
       }
