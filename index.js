@@ -3,7 +3,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const { initializeApp } = require('firebase/app');
 const { getDatabase, ref, set, get, update, remove, push } = require('firebase/database');
-const { showDynamicButtonsPanel } = require('./dynamic_buttons_manager');
+
 const app = express();
 
 const token = process.env.BOT_TOKEN;
@@ -168,58 +168,53 @@ const supportChatMap = {};
     res.sendStatus(200);
   });
 // ---- Main Menu ----
-async function mainMenuKeyboard() {
-  let inline_keyboard = [
-    [
-      { text: '📊محاسبه ریت', callback_data: 'calculate_rate' },
-      { text: '🏆محاسبه برد و باخت', callback_data: 'calculate_wl' }
-    ],
-    [
-      { text: '📜 لیست پیک/بن', callback_data: 'pickban_list' }
-    ],
-    [
-      { text: '🔗دعوت دوستان', callback_data: 'referral' },
-      { text: '👤 پروفایل', callback_data: 'profile' }
-    ],
-    [
-      { text: '➕ ثبت درخواست اسکواد', callback_data: 'squad_request' },
-      { text: '👥 مشاهده اسکوادها', callback_data: 'view_squads' }
-    ],
-    [
-      { text: '💬پشتیبانی', callback_data: 'support' }
-    ],
-    [
-      { text: '📚راهنما', callback_data: 'help' }
-    ],
-    [
-      { text: '💰خرید امتیاز', callback_data: 'buy' }
-    ],
-    [
-      { text: '🍀 شانس', callback_data: 'chance' },
-      { text: '🎁 کد هدیه', callback_data: 'gift_code' }
-    ]
-  ];
-
-  // دکمه‌های پویا
-  const snapshot = await get(ref(db, 'dynamic_buttons'));
-  let buttons = snapshot.exists() ? snapshot.val() : [];
-  if (!Array.isArray(buttons)) buttons = [];
-  buttons.forEach(row => {
-    inline_keyboard.push(
-      row.map(btn => ({
-        text: btn.text,
-        callback_data: `dynbtn_user_${btn.id}`
-      }))
-    );
-  });
-
-  return { reply_markup: { inline_keyboard } };
+function mainMenuKeyboard() {
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        [
+{ text: '🧩 تورنومنت', callback_data: 'tournament' },
+    { text: '📊محاسبه ریت', callback_data: 'calculate_rate' },
+    { text: '🏆محاسبه برد و باخت', callback_data: 'calculate_wl' },
+    { text: '⚔ هیرو کانتر', callback_data: 'hero_counter' }
+  ],
+  [
+    { text: '🔥 چالش', callback_data: 'challenge' }
+        ],
+        [
+          { text: '📜 لیست پیک/بن', callback_data: 'pickban_list' }
+        ],
+        [
+          { text: '🔗دعوت دوستان', callback_data: 'referral' },
+          { text: '👤 پروفایل', callback_data: 'profile' }
+        ],
+        [
+          { text: '➕ ثبت درخواست اسکواد', callback_data: 'squad_request' },
+          { text: '👥 مشاهده اسکوادها', callback_data: 'view_squads' }
+        ],
+        [
+          { text: '💬پشتیبانی', callback_data: 'support' }
+        ],
+        [
+          { text: '📚راهنما', callback_data: 'help' }
+        ],
+        [
+           { text: '💰خرید امتیاز', callback_data: 'buy' }
+        ],
+        [
+          { text: '🍀 شانس', callback_data: 'chance' },
+          { text: '🎁 کد هدیه', callback_data: 'gift_code' }
+        ]
+      ]
+    }
+  };
 }
-
-async function sendMainMenu(userId, messageId = null, currentText = null, currentMarkup = null) {
+function sendMainMenu(userId, messageId = null, currentText = null, currentMarkup = null) {
   const text = 'سلام، به ربات محاسبه‌گر Mobile Legends خوش آمدید ✨';
-  const { reply_markup } = await mainMenuKeyboard();
+  const { reply_markup } = mainMenuKeyboard();
+
   if (messageId) {
+    // فقط اگر متن یا مارکاپ تغییر کرده باشد ویرایش کن
     if (text !== currentText || JSON.stringify(reply_markup) !== JSON.stringify(currentMarkup)) {
       bot.editMessageText(text, {
         chat_id: userId,
@@ -255,7 +250,8 @@ bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
       bot.sendMessage(refId, `🎉 یک نفر با لینک دعوت شما وارد ربات شد و ۵ امتیاز گرفتید!`);
     }
   }
-  userState[userId] = null; sendMainMenu(userId);
+  userState[userId] = null;
+  sendMainMenu(userId);
 });
 
 // ---- Bot Active State with Firebase ----
@@ -322,9 +318,6 @@ bot.onText(/\/panel/, async (msg) => {
           { text: '🗑 حذف اسکواد تاییدشده', callback_data: 'admin_delete_approved_squads' }
         ],
         [
-                          { text: '🧩 ساخت دکمه پویا', callback_data: 'dynamic_buttons_panel' }
-        ],
-        [
           { text: '📋 جزییات کاربران', callback_data: 'user_details' }
         ]
       ]
@@ -358,105 +351,6 @@ if (data === 'activate_bot' && userId === adminId) {
   return;
 }
 
-if (data === 'dynamic_buttons_panel' && userId === adminId) {
-  await showDynamicButtonsPanel(bot, db, userId);
-  return;
-}
-
-if (data === 'dynbtn_add_row' && userId === adminId) {
-  const snapshot = await get(ref(db, 'dynamic_buttons'));
-  let buttons = snapshot.exists() ? snapshot.val() : [];
-  buttons.push([]);
-  await set(ref(db, 'dynamic_buttons'), buttons);
-  await bot.answerCallbackQuery(query.id, { text: 'ردیف جدید افزوده شد.' });
-  await showDynamicButtonsPanel(bot, db, userId);
-  return;
-}
-
-if (data === 'dynbtn_add' && userId === adminId) {
-  userState[userId] = { step: 'add_dynamic_btn_text' };
-  await bot.answerCallbackQuery(query.id);
-  await bot.sendMessage(userId, 'متن دکمه جدید را ارسال کنید:');
-  return;
-}
-
-if (data.startsWith('dynbtn_edit_') && userId === adminId) {
-  const [rowIdx, btnIdx] = data.replace('dynbtn_edit_', '').split('_').map(Number);
-  userState[userId] = { step: 'edit_dynamic_btn', rowIdx, btnIdx };
-  await bot.answerCallbackQuery(query.id);
-  await bot.sendMessage(userId, 'متن جدید دکمه را ارسال کنید:');
-  return;
-}
-
-if (data.startsWith('dynbtn_delete_') && userId === adminId) {
-  const [rowIdx, btnIdx] = data.replace('dynbtn_delete_', '').split('_').map(Number);
-  const snapshot = await get(ref(db, 'dynamic_buttons'));
-  let buttons = snapshot.exists() ? snapshot.val() : [];
-  if (buttons[rowIdx] && buttons[rowIdx][btnIdx]) {
-    buttons[rowIdx].splice(btnIdx, 1);
-    if (buttons[rowIdx].length === 0) buttons.splice(rowIdx, 1);
-    await set(ref(db, 'dynamic_buttons'), buttons);
-  }
-  await bot.answerCallbackQuery(query.id, { text: 'دکمه حذف شد.' });
-  await showDynamicButtonsPanel(bot, db, userId);
-  return;
-}
-
-if (data.startsWith('dynbtn_move_') && userId === adminId) {
-  const parts = data.replace('dynbtn_move_', '').split('_');
-  const rowIdx = Number(parts[0]);
-  const btnIdx = Number(parts[1]);
-  const direction = parts[2];
-  const snapshot = await get(ref(db, 'dynamic_buttons'));
-  let buttons = snapshot.exists() ? snapshot.val() : [];
-  let btn = buttons[rowIdx][btnIdx];
-  if (!btn) return;
-  if (direction === 'up' && rowIdx > 0) {
-    buttons[rowIdx].splice(btnIdx, 1);
-    buttons[rowIdx - 1].push(btn);
-  } else if (direction === 'down' && rowIdx < buttons.length - 1) {
-    buttons[rowIdx].splice(btnIdx, 1);
-    buttons[rowIdx + 1].push(btn);
-  } else if (direction === 'left' && btnIdx > 0) {
-    [buttons[rowIdx][btnIdx - 1], buttons[rowIdx][btnIdx]] = [buttons[rowIdx][btnIdx], buttons[rowIdx][btnIdx - 1]];
-  } else if (direction === 'right' && btnIdx < buttons[rowIdx].length - 1) {
-    [buttons[rowIdx][btnIdx + 1], buttons[rowIdx][btnIdx]] = [buttons[rowIdx][btnIdx], buttons[rowIdx][btnIdx + 1]];
-  }
-  buttons = buttons.filter(r => r.length > 0);
-  await set(ref(db, 'dynamic_buttons'), buttons);
-  await bot.answerCallbackQuery(query.id, { text: 'جابجایی انجام شد.' });
-  await showDynamicButtonsPanel(bot, db, userId);
-  return;
-}
-
-if (data.startsWith('dynbtn_user_')) {
-  const btnId = data.replace('dynbtn_user_', '');
-  const snapshot = await get(ref(db, 'dynamic_buttons'));
-  let buttons = snapshot.exists() ? snapshot.val() : [];
-  if (!Array.isArray(buttons)) buttons = [];
-  let found;
-  for (let row of buttons) {
-    for (let btn of row) {
-      if (btn.id && String(btn.id) === btnId) {
-        found = btn;
-        break;
-      }
-    }
-    if (found) break;
-  }
-  if (found) {
-    if (found.responseType === 'alert') {
-      await bot.answerCallbackQuery(query.id, { text: found.responseText, show_alert: true });
-    } else {
-      await bot.answerCallbackQuery(query.id);
-      await bot.sendMessage(userId, found.responseText);
-    }
-  } else {
-    await bot.answerCallbackQuery(query.id, { text: "دکمه پیدا نشد.", show_alert: true });
-  }
-  return;
-}
-
   // ---- Anti-Spam ----
   if (userId !== adminId) {
     if (isMuted(userId)) {
@@ -474,11 +368,25 @@ if (data.startsWith('dynbtn_user_')) {
       return;
     }
   }
+  
+  if (data === 'tournament') {
+  await bot.answerCallbackQuery(query.id);
+  await bot.sendMessage(userId, 'فعلاً هیچ تورنمنتی در دسترس نیست.\nجزییات بیشتری بزودی اعلام خواهد شد.');
+  return;
+}
+if (data === 'hero_counter') {
+  await bot.answerCallbackQuery(query.id, { text: 'این بخش به زودی فعال می‌شود. لطفا منتظر بمانید.', show_alert: true });
+  return;
+}
+if (data === 'challenge') {
+  await bot.answerCallbackQuery(query.id, { text: 'این بخش فعلاً از دسترس خارج شده است.', show_alert: true });
+  return;
+}
 
   // ---- Main menu back ----
   if (data === 'main_menu') {
     await bot.answerCallbackQuery(query.id);
-   await sendMainMenu(userId, messageId);
+    sendMainMenu(userId, messageId);
     return;
   }
 
@@ -547,10 +455,6 @@ if (data.startsWith('dynbtn_user_')) {
     userState[userId] = null;
     return;
   }
-  
-  if (data.startsWith('dynbtn_user_')) {
-  // دکمه را پیدا کن و بسته به responseType پیام یا alert بفرست
-}
 
   // ---- اسکواد: ثبت درخواست ----
   if (data === 'squad_request') {
@@ -870,44 +774,6 @@ if (!botActive && msg.from.id !== adminId) {
   if (user?.banned) {
     return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده ندارید.');
   }
-  
-  if (userId === adminId && userState[userId]?.step?.startsWith('dynbtn')) {
-  await handleDynamicButtonsMessage(bot, db, msg, userState);
-  return;
-}
-
-// ساخت دکمه جدید
-if (userState[userId]?.step === 'add_dynamic_btn_text') {
-  const textBtn = msg.text.trim();
-  const snapshot = await get(ref(db, 'dynamic_buttons'));
-  let buttons = snapshot.exists() ? snapshot.val() : [];
-  if (buttons.length === 0) buttons.push([]);
-  const newBtn = {
-    id: Date.now(),
-    text: textBtn,
-    responseType: 'alert', // یا message
-    responseText: 'پاسخ پیش‌فرض'
-  };
-  buttons[buttons.length - 1].push(newBtn);
-  await set(ref(db, 'dynamic_buttons'), buttons);
-  userState[userId] = null;
-  await bot.sendMessage(userId, 'دکمه اضافه شد.');
-  await showDynamicButtonsPanel(bot, db, userId);
-  return;
-}
-
-// ویرایش متن دکمه
-if (userState[userId]?.step === 'edit_dynamic_btn') {
-  const { rowIdx, btnIdx } = userState[userId];
-  const snapshot = await get(ref(db, 'dynamic_buttons'));
-  let buttons = snapshot.exists() ? snapshot.val() : [];
-  buttons[rowIdx][btnIdx].text = msg.text.trim();
-  await set(ref(db, 'dynamic_buttons'), buttons);
-  userState[userId] = null;
-  await bot.sendMessage(userId, 'متن دکمه ویرایش شد.');
-  await showDynamicButtonsPanel(bot, db, userId);
-  return;
-}
 
   // ---- پاسخ به پشتیبانی توسط ادمین ----
   if (msg.reply_to_message && userId === adminId) {
@@ -1054,20 +920,20 @@ if (userState[userId]?.step === 'edit_dynamic_btn') {
       const losses = state.total - wins;
       await updatePoints(userId, -1);
       userState[userId] = null;
-     await bot.sendMessage(userId, `برد: ${wins} | باخت: ${losses}\nامتیاز باقی‌مانده: ${user.points - 1}`);
-     await sendMainMenu(userId);
+      bot.sendMessage(userId, `برد: ${wins} | باخت: ${losses}\nامتیاز باقی‌مانده: ${user.points - 1}`);
+      sendMainMenu(userId);
     }
   }
-if (state.step === 'target') {
+  if (state.step === 'target') {
     const target = parseFloat(text);
     if (isNaN(target) || target < 0 || target > 100) return bot.sendMessage(userId, 'ریت هدف را به صورت عدد بین 0 تا 100 وارد کن.');
     const currentWins = (state.total * state.rate) / 100;
     const neededWins = Math.ceil(((target / 100 * state.total) - currentWins) / (1 - target / 100));
     await updatePoints(userId, -1);
     userState[userId] = null;
-    await bot.sendMessage(userId, `برای رسیدن به ${target}% باید ${neededWins} بازی متوالی ببری.\nامتیاز باقی‌مانده: ${user.points - 1}`);
-    await sendMainMenu(userId);
-}
+    bot.sendMessage(userId, `برای رسیدن به ${target}% باید ${neededWins} بازی متوالی ببری.\nامتیاز باقی‌مانده: ${user.points - 1}`);
+    sendMainMenu(userId);
+  }
   if (state.step === 'support') {
     if (msg.message_id && text.length > 0) {
       try {
@@ -1086,8 +952,8 @@ if (state.step === 'target') {
       await deleteGiftCode(code);
       await updatePoints(userId, points);
       userState[userId] = null;
-     await bot.sendMessage(userId, `تبریک! کد با موفقیت فعال شد و ${points} امتیاز به حساب شما افزوده شد.`);
-     await sendMainMenu(userId);
+      bot.sendMessage(userId, `تبریک! کد با موفقیت فعال شد و ${points} امتیاز به حساب شما افزوده شد.`);
+      sendMainMenu(userId);
       return;
     }
     const globalGift = await getGlobalGiftCode(code);
@@ -1100,8 +966,8 @@ if (state.step === 'target') {
       await addUserToGlobalGiftCode(code, userId);
       await updatePoints(userId, globalGift.points);
       userState[userId] = null;
-     await bot.sendMessage(userId, `کد همگانی فعال شد و ${globalGift.points} امتیاز به حساب شما اضافه شد.`);
-     await sendMainMenu(userId);
+      bot.sendMessage(userId, `کد همگانی فعال شد و ${globalGift.points} امتیاز به حساب شما اضافه شد.`);
+      sendMainMenu(userId);
       return;
     }
     userState[userId] = null;
