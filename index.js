@@ -228,14 +228,20 @@ function sendMainMenu(userId, messageId = null, currentText = null, currentMarku
 }
 
 // ---- /start with referral ----
-bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
-  const userId = msg.from.id;
-  const refId = match[1] ? parseInt(match[1]) : null;
+async function setBotActive(state) {
+  const refPath = ref(db, 'settings/botActive');
+  await set(refPath, state);
+}
 
-  const botActive = await getBotActive();
-  if (!botActive && userId !== adminId) {
-    return bot.sendMessage(userId, 'ربات در حال حاضر غیرفعال است.');
+async function getBotActive() {
+  try {
+    const snapshot = await get(ref(db, 'settings/botActive'));
+    return snapshot.exists() ? snapshot.val() : true; // پیش‌فرض روشن
+  } catch (error) {
+    console.error('خطا در خواندن وضعیت فعال بودن ربات:', error);
+    return true; // پیش‌فرض اگر مشکلی پیش اومد
   }
+}
 
   await ensureUser(msg.from);
   const user = await getUser(userId);
@@ -343,18 +349,24 @@ if (userId !== adminId) {
   return bot.answerCallbackQuery(query.id, { text: 'شما دسترسی ندارید.', show_alert: true });
 }
 
-try {
-  if (data === 'activate_bot') {
+if (data === 'activate_bot') {
+  try {
     await setBotActive(true);
     console.log('ربات روشن شد');
     await bot.answerCallbackQuery(query.id, { text: 'ربات روشن شد.' });
-  } else if (data === 'deactivate_bot') {
+  } catch (error) {
+    console.error('خطا در روشن کردن ربات:', error);
+    await bot.answerCallbackQuery(query.id, { text: 'خطا در روشن کردن ربات.' });
+  }
+} else if (data === 'deactivate_bot') {
+  try {
     await setBotActive(false);
     console.log('ربات خاموش شد');
     await bot.answerCallbackQuery(query.id, { text: 'ربات خاموش شد.' });
+  } catch (error) {
+    console.error('خطا در خاموش کردن ربات:', error);
+    await bot.answerCallbackQuery(query.id, { text: 'خطا در خاموش کردن ربات.' });
   }
-} catch (error) {
-  console.error('خطا در callback_query:', error);
 }
 
   // ---- Main menu back ----
