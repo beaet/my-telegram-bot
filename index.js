@@ -243,16 +243,6 @@ async function getBotActive() {
   }
 }
 
-  if (refId && refId !== userId) {
-    const refUser = await getUser(refId);
-    if (refUser && !user.invited_by) {
-      await update(userRef(userId), { invited_by: refId });
-      await updatePoints(refId, 5);
-      await update(userRef(refId), { invites: (refUser.invites || 0) + 1 });
-      bot.sendMessage(refId, `🎉 یک نفر با لینک دعوت شما وارد ربات شد و ۵ امتیاز گرفتید!`);
-    }
-  }
-
   userState[userId] = null;
   sendMainMenu(userId);
 });
@@ -336,6 +326,16 @@ bot.on('callback_query', async (query) => {
       buttonSpamMap[userId] = [];
       await bot.answerCallbackQuery(query.id, { text: '🚫 به دلیل اسپم کردن دکمه‌ها، تا پانزده دقیقه نمی‌توانید از ربات استفاده کنید.', show_alert: true });
       return;
+    }
+  }
+  
+  if (refId && refId !== userId) {
+    const refUser = await getUser(refId);
+    if (refUser && !user.invited_by) {
+      await update(userRef(userId), { invited_by: refId });
+      await updatePoints(refId, 5);
+      await update(userRef(refId), { invites: (refUser.invites || 0) + 1 });
+      bot.sendMessage(refId, `🎉 یک نفر با لینک دعوت شما وارد ربات شد و ۵ امتیاز گرفتید!`);
     }
   }
   
