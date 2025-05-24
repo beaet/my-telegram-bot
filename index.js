@@ -321,33 +321,6 @@ bot.on('callback_query', async (query) => {
   const currentText = query.message.text;
   const currentMarkup = query.message.reply_markup || null;
 
-  // فرض بر این که می‌خواهی منوی اصلی را نمایش بدهی
-
-  if (userId !== adminId) {
-    return bot.answerCallbackQuery(query.id, { text: 'شما دسترسی ندارید.', show_alert: true });
-  }
-
-  if (data === 'activate_bot') {
-    await setBotActive(true);
-    bot.answerCallbackQuery(query.id, { text: 'ربات روشن شد.' });
-    bot.editMessageReplyMarkup(query.message.reply_markup, {
-      chat_id: query.message.chat.id,
-      message_id: query.message.message_id
-    });
-  } else if (data === 'deactivate_bot') {
-    await setBotActive(false);
-    bot.answerCallbackQuery(query.id, { text: 'ربات خاموش شد.' });
-    bot.editMessageReplyMarkup(query.message.reply_markup, {
-      chat_id: query.message.chat.id,
-      message_id: query.message.message_id
-    });
-  }
-
-  // در صورت نیاز می‌تونی همین‌جا دوباره پنل رو بفرستی
-  // bot.sendMessage(userId, 'وضعیت جدید ربات ذخیره شد.');
-});
-  
-
   // ---- Anti-Spam ----
   if (userId !== adminId) {
     if (isMuted(userId)) {
@@ -366,13 +339,33 @@ bot.on('callback_query', async (query) => {
     }
   }
 
+  if (userId !== adminId) {
+    return bot.answerCallbackQuery(query.id, { text: 'شما دسترسی ندارید.', show_alert: true });
+  }
+
+  if (data === 'activate_bot') {
+    await setBotActive(true);
+    await bot.answerCallbackQuery(query.id, { text: 'ربات روشن شد.' });
+    await bot.editMessageReplyMarkup(query.message.reply_markup, {
+      chat_id: query.message.chat.id,
+      message_id: query.message.message_id
+    });
+  } else if (data === 'deactivate_bot') {
+    await setBotActive(false);
+    await bot.answerCallbackQuery(query.id, { text: 'ربات خاموش شد.' });
+    await bot.editMessageReplyMarkup(query.message.reply_markup, {
+      chat_id: query.message.chat.id,
+      message_id: query.message.message_id
+    });
+  }
+
   // ---- Main menu back ----
   if (data === 'main_menu') {
     await bot.answerCallbackQuery(query.id);
     sendMainMenu(userId, messageId);
     return;
   }
-
+  
   const user = await getUser(userId);
   if (!user) return await bot.answerCallbackQuery(query.id, { text: 'خطا در دریافت اطلاعات کاربر.', show_alert: true });
   if (user?.banned) return await bot.answerCallbackQuery(query.id, { text: 'شما بن شده‌اید و اجازه استفاده ندارید.', show_alert: true });
