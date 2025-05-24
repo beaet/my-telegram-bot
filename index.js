@@ -157,7 +157,7 @@ const supportChatMap = {};
 // ---- Bot Init ----
 (async () => {
   await fetchBotActiveStatus();
-  // اینجا بقیه کدهای bot و express را بنویس
+  // اینجا بقیه کدهای bot و expressرا بنویس
   // مثلاً:
   const bot = new TelegramBot(token, { polling: false });
   bot.setWebHook(`${webhookUrl}/bot${token}`);
