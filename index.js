@@ -68,12 +68,12 @@ async function getAllUsersFromDatabase() {
 }
 
 async function setBotActive(status) {
-  await db.ref('settings/botActive').set(status);
+  await set(settingsRef('botActive'), status);
 }
 
 async function getBotActive() {
-  const snapshot = await db.ref('settings/botActive').once('value');
-  return snapshot.exists() ? snapshot.val() : true; // پیش‌فرض: روشن
+  const snapshot = await get(settingsRef('botActive'));
+  return snapshot.exists() ? snapshot.val() : true; // پیش‌فرض روشن
 }
 
 // ---- Gift Code helpers ----
@@ -231,18 +231,18 @@ function sendMainMenu(userId, messageId = null, currentText = null, currentMarku
 bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
   const userId = msg.from.id;
   const refId = match[1] ? parseInt(match[1]) : null;
-  
-  let botActive = true;
 
-(async () => {
-  botActive = await getBotActive();
-})();
+  const botActive = await getBotActive();
+  if (!botActive && userId !== adminId) {
+    return bot.sendMessage(userId, 'ربات در حال حاضر غیرفعال است.');
+  }
 
   await ensureUser(msg.from);
   const user = await getUser(userId);
   if (user?.banned) {
     return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده از ربات را ندارید.');
   }
+
   if (refId && refId !== userId) {
     const refUser = await getUser(refId);
     if (refUser && !user.invited_by) {
@@ -252,6 +252,7 @@ bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
       bot.sendMessage(refId, `🎉 یک نفر با لینک دعوت شما وارد ربات شد و ۵ امتیاز گرفتید!`);
     }
   }
+
   userState[userId] = null;
   sendMainMenu(userId);
 });
@@ -322,29 +323,31 @@ bot.on('callback_query', async (query) => {
 
   // فرض بر این که می‌خواهی منوی اصلی را نمایش بدهی
   
-if (data === 'deactivate_bot' && userId === adminId) {
-  botActive = false;
-  await setBotActive(false);
-  await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی خاموش شد.' });
-  // (اختیاری) پنل مدیریت را بروزرسانی کن
-  return;
-}
+/ فقط ادمین اجازه تغییر وضعیت ربات را دارد
+  if (userId !== adminId) {
+    return bot.answerCallbackQuery(query.id, { text: 'شما دسترسی ندارید.', show_alert: true });
+  }
 
-if (data === 'activate_bot' && userId === adminId) {
-  botActive = true;
-  await setBotActive(true);
-  await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی روشن شد.' });
-  // (اختیاری) پنل مدیریت را بروزرسانی کن
-  return;
-}
+  if (data === 'activate_bot') {
+    await setBotActive(true);
+    bot.answerCallbackQuery(query.id, { text: 'ربات روشن شد.' });
+    bot.editMessageReplyMarkup(query.message.reply_markup, {
+      chat_id: query.message.chat.id,
+      message_id: query.message.message_id
+    });
+  } else if (data === 'deactivate_bot') {
+    await setBotActive(false);
+    bot.answerCallbackQuery(query.id, { text: 'ربات خاموش شد.' });
+    bot.editMessageReplyMarkup(query.message.reply_markup, {
+      chat_id: query.message.chat.id,
+      message_id: query.message.message_id
+    });
+  }
+
+  // در صورت نیاز می‌تونی همین‌جا دوباره پنل رو بفرستی
+  // bot.sendMessage(userId, 'وضعیت جدید ربات ذخیره شد.');
+});
   
-if (!botActive && userId !== adminId) {
-  await bot.answerCallbackQuery(query.id, {
-    text: 'ربات موقتاً غیرفعال است.',
-    show_alert: true
-  });
-  return;
-}
 
   // ---- Anti-Spam ----
   if (userId !== adminId) {
