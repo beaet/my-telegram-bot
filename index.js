@@ -14,7 +14,7 @@ let botActive = true;
 
 // تعریف bot قبل از استفاده
 const bot = new TelegramBot(token, { polling: false });
-bot.setWebHook(${webhookUrl}/bot${token});
+bot.setWebHook(`${webhookUrl}/bot${token}`);
 
 
 // ---- Firebase Config ----
