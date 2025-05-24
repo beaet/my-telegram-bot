@@ -67,10 +67,6 @@ async function getAllUsersFromDatabase() {
   });
 }
 
-function settingsRef(key) {
-  return ref(db, `settings/${key}`);
-}
-
 async function setBotActive(status) {
   await set(settingsRef('botActive'), status);
 }
