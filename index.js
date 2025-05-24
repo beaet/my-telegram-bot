@@ -678,16 +678,16 @@ if (data.startsWith('delete_squadreq_') && userId === adminId) {
         return;
       }
       const snap = await get(ref(db, 'users'));
-      const users = snap.exists() ? Object.values(snap.val()) : [];
-      const activeUsers = users.filter(u => !u.banned);
-      const bannedUsers = users.filter(u => u.banned);
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, `👥 کاربران کل: ${users.length}\n✅ کاربران فعال: ${activeUsers.length}\n⛔ کاربران بن شده: ${bannedUsers.length}`);
-    default:
-      await bot.answerCallbackQuery(query.id);
-      break;
-  }
-});
+const users = snap.exists() ? Object.values(snap.val()) : [];
+const activeUsers = users.filter(u => !u.banned);
+const bannedUsers = users.filter(u => u.banned);
+await bot.answerCallbackQuery(query.id);
+await bot.sendMessage(userId, `👥 کاربران کل: ${users.length}\n✅ کاربران فعال: ${activeUsers.length}\n⛔ کاربران بن شده: ${bannedUsers.length}`);
+break; // اضافه‌شده
+
+default:
+  await bot.answerCallbackQuery(query.id);
+  break;
 
 // ---- اداره مراحل ثبت اسکواد ----
 // ... ناحیه message handler بدون تغییر، فقط بخش stateهای جدید اضافه شود
