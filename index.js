@@ -622,33 +622,37 @@ if (data === 'view_squads') {
   // ---- اسکواد: حذف فقط توسط ادمین ----
     
     // کسر امتیاز
-    await updatePoints(userId, -5);
-    userState[userId] = null;
-    await bot.answerCallbackQuery(query.id, { text: 'درخواست ثبت شد.' });
-    bot.sendMessage(userId, '✅ درخواست شما با موفقیت ثبت شد و به صف بررسی مدیریت اضافه شد.');
-    bot.sendMessage(adminId,
-      `درخواست جدید اسکواد:\n\nاسکواد: ${state.squad_name}\nکاربر: ${userId}\nآیدی بازی: ${state.game_id}\nرنک: ${state.min_rank}\nنقش: ${state.roles_needed}\nتوضیحات: ${state.details}\n\n`,
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: 'تایید ✅', callback_data: `approve_squadreq_${reqId}` },
-              { text: 'حذف ❌', callback_data: `delete_squadreq_${reqId}` }
-            ]
+    if (data === 'confirm_squad_req' && userState[userId] && userState[userId].squad_name) {
+  // ... ثبت در دیتابیس و کسر امتیاز و ارسال پیام
+  await updatePoints(userId, -5);
+  userState[userId] = null;
+  await bot.answerCallbackQuery(query.id, { text: 'درخواست ثبت شد.' });
+  bot.sendMessage(userId, '✅ درخواست شما با موفقیت ثبت شد و به صف بررسی مدیریت اضافه شد.');
+  bot.sendMessage(adminId,
+    `درخواست جدید اسکواد:\n\nاسکواد: ${state.squad_name}\nکاربر: ${userId}\nآیدی بازی: ${state.game_id}\nرنک: ${state.min_rank}\nنقش: ${state.roles_needed}\nتوضیحات: ${state.details}\n\n`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: 'تایید ✅', callback_data: `approve_squadreq_${reqId}` },
+            { text: 'حذف ❌', callback_data: `delete_squadreq_${reqId}` }
           ]
-        }
+        ]
       }
-    );
-    return;
-  }
+    }
+  );
+  return;
+} // این } باید باشد
 
-  // ---- محاسبه ریت و برد/باخت و ... ----
-  switch (data) {
-    case 'calculate_rate':
-    case 'calculate_wl':
-      if (user.points <= 0) {
-        return bot.answerCallbackQuery(query.id, { text: 'شما امتیازی برای استفاده ندارید.', show_alert: true });
-      }
+// بلافاصله بعدش سوییچ یا بقیه کدها:
+switch (data) {
+  case 'calculate_rate':
+  case 'calculate_wl':
+    if (user.points <= 0) {
+      return bot.answerCallbackQuery(query.id, { text: 'شما امتیازی برای استفاده ندارید.', show_alert: true });
+    }
+    // ...
+}
       userState[userId] = { type: data === 'calculate_rate' ? 'rate' : 'w/l', step: 'total' };
       await bot.answerCallbackQuery(query.id);
       return bot.sendMessage(userId, 'تعداد کل بازی‌ها را وارد کن:');
