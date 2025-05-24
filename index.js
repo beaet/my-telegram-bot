@@ -417,13 +417,6 @@ bot.on('callback_query', async (query) => {
     return;
   }
   
-  bot.on('callback_query', async (query) => {
-  const data = query.data;
-  const userId = query.from.id;
-  const chatId = query.message.chat.id;
-
-  if (data === 'user_details') {
-    // کد نمایش کاربران
   } else if (data === 'squad_request') {
     // کد ثبت اسکواد
   }
@@ -466,6 +459,28 @@ bot.on('callback_query', async (query) => {
     await bot.answerCallbackQuery(query.id);
     return;
   }
+  
+  if (data === 'user_details' && userId === adminId) {
+  await bot.answerCallbackQuery(query.id);
+  // گرفتن همه کاربران
+  const usersSnap = await get(ref(db, 'users'));
+  if (!usersSnap.exists()) {
+    return bot.sendMessage(userId, 'کاربری یافت نشد.');
+  }
+  const users = usersSnap.val();
+  let text = 'لیست کاربران:\n\n';
+  for (const [uid, info] of Object.entries(users)) {
+    text += `👤 آیدی: ${uid}\nنام کاربری: @${info.username || 'ندارد'}\nامتیاز: ${info.points || 0}\n---\n`;
+  }
+  await bot.sendMessage(userId, text, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: 'بازگشت', callback_data: 'panel_back' }]
+      ]
+    }
+  });
+  return;
+}
 
   // ---- مدیریت اسکواد: تایید نشده (ادمین) ----
   if (data === 'admin_squad_list' && userId === adminId) {
