@@ -515,115 +515,35 @@ if (data === 'view_squads') {
   }
 
   // ---- اسکواد: تایید یا لغو ثبت توسط کاربر ----
-  if (data === 'cancel_squad_req') {
-    userState[userId] = null;
-    await bot.answerCallbackQuery(query.id, { text: 'لغو شد.' });
-    return bot.sendMessage(userId, 'درخواست لغو شد.');
-  }
-  if (data === 'confirm_squad_req' && userState[userId] && userState[userId].squad_name) {
-    const state = userState[userId];
-    // ذخیره در دیتابیس
-    const reqRef = push(squadReqsRef);
-    const reqId = reqRef.key;
-    await set(reqRef, {
-      user_id: userId,
-      squad_name: state.squad_name,
-      roles_needed: state.roles_needed,
-      game_id: state.game_id,
-      min_rank: state.min_rank,
-      details: state.details,
-      created_at: Date.now(),
-      approved: false,
-      deleted: false
-    });
+// ---- اسکواد: تایید یا لغو ثبت توسط کاربر ----
+if (data === 'cancel_squad_req') {
+  userState[userId] = null;
+  await bot.answerCallbackQuery(query.id, { text: 'لغو شد.' });
+  return bot.sendMessage(userId, 'درخواست لغو شد.');
+}
 
-    if (!botActive && userId !== adminId) {
-      return bot.sendMessage(userId, 'ربات موقتاً خاموش است.');
-    }
+// ---- اسکواد: تایید نهایی ثبت توسط کاربر ----
+if (data === 'confirm_squad_req' && userState[userId] && userState[userId].squad_name) {
+  const state = userState[userId];
+  // ذخیره در دیتابیس
+  const reqRef = push(squadReqsRef);
+  const reqId = reqRef.key;
+  await set(reqRef, {
+    user_id: userId,
+    squad_name: state.squad_name,
+    roles_needed: state.roles_needed,
+    game_id: state.game_id,
+    min_rank: state.min_rank,
+    details: state.details,
+    created_at: Date.now(),
+    approved: false,
+    deleted: false
+  });
 
-    await updatePoints(userId, -5);
-    userState[userId] = null;
-    await bot.answerCallbackQuery(query.id, { text: 'درخواست ثبت شد.' });
-    bot.sendMessage(userId, '✅ درخواست شما با موفقیت ثبت شد و به صف بررسی مدیریت اضافه شد.');
-    bot.sendMessage(adminId,
-      `درخواست جدید اسکواد:\n\nاسکواد: ${state.squad_name}\nکاربر: ${userId}\nآیدی بازی: ${state.game_id}\nرنک: ${state.min_rank}\nنقش: ${state.roles_needed}\nتوضیحات: ${state.details}\n\n`,
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: 'تایید ✅', callback_data: `approve_squadreq_${reqId}` },
-              { text: 'حذف ❌', callback_data: `delete_squadreq_${reqId}` }
-            ]
-          ]
-        }
-      }
-    );
-    return;
+  if (!botActive && userId !== adminId) {
+    return bot.sendMessage(userId, 'ربات موقتاً خاموش است.');
   }
 
-  // ... سایر دکمه‌ها و سوییچ‌های خودت
-
-  // ---- مدیریت اسکواد: حذف اسکواد تایید شده (ادمین) ----
-  if (data === 'admin_delete_approved_squads' && userId === adminId) {
-    const approvedReqs = await getAllSquadReqs({ approved: true });
-    if (!approvedReqs.length) {
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'اسکواد تاییدشده‌ای برای حذف وجود ندارد.');
-    }
-    showAdminApprovedSquadCard(userId, approvedReqs, 0);
-    await bot.answerCallbackQuery(query.id);
-    return;
-  }
-  if (data.startsWith('admin_approved_squad_card_') && userId === adminId) {
-    const idx = parseInt(data.replace('admin_approved_squad_card_', ''));
-    const approvedReqs = await getAllSquadReqs({ approved: true });
-    showAdminApprovedSquadCard(userId, approvedReqs, idx);
-    await bot.answerCallbackQuery(query.id);
-    return;
-  }
-  if (data.startsWith('admin_delete_approved_squadreq_') && userId === adminId) {
-    const reqId = data.replace('admin_delete_approved_squadreq_', '');
-    const req = await getSquadReq(reqId);
-    if (!req || req.deleted)
-      return bot.answerCallbackQuery(query.id, { text: 'اسکواد پیدا نشد یا قبلا حذف شده.', show_alert: true });
-    await update(squadReqRef(reqId), { deleted: true });
-    await bot.sendMessage(req.user_id, `اسکواد شما توسط مدیریت حذف شد.`);
-    await bot.answerCallbackQuery(query.id, { text: 'اسکواد حذف شد.' });
-    return;
-  }
-
-  // ---- اسکواد: تایید توسط ادمین ----
-  if (data.startsWith('approve_squadreq_') && userId === adminId) {
-    const reqId = data.replace('approve_squadreq_', '');
-    const req = await getSquadReq(reqId);
-    if (!req || req.approved || req.deleted)
-      return bot.answerCallbackQuery(query.id, { text: 'درخواست معتبر نیست یا قبلا تایید/حذف شده.', show_alert: true });
-    await update(squadReqRef(reqId), { approved: true });
-    await bot.sendMessage(req.user_id,
-      `✅ درخواست شما برای اسکواد «${req.squad_name}» توسط ادمین تایید شد!\n🟢 اکنون درخواست شما برای دیگران نمایش داده خواهد شد.`);
-    await bot.answerCallbackQuery(query.id, { text: 'تایید شد و اطلاع‌رسانی گردید.' });
-    return;
-  }
-
-
-  // ... ادامه کد
-  if (data === 'deactivate_bot' && userId === adminId) {
-    botActive = false;
-    await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی خاموش شد.' });
-    return;
-  }
-  if (data === 'activate_bot' && userId === adminId) {
-    botActive = true;
-    await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی روشن شد.' });
-    return;
-  }
-  // ... ادامه سوییچ
-
-  // ---- اسکواد: حذف فقط توسط ادمین ----
-    
-    // کسر امتیاز
-    if (data === 'confirm_squad_req' && userState[userId] && userState[userId].squad_name) {
-  // ... ثبت در دیتابیس و کسر امتیاز و ارسال پیام
   await updatePoints(userId, -5);
   userState[userId] = null;
   await bot.answerCallbackQuery(query.id, { text: 'درخواست ثبت شد.' });
@@ -642,128 +562,143 @@ if (data === 'view_squads') {
     }
   );
   return;
-} // این } باید باشد
+}
 
-// بلافاصله بعدش سوییچ یا بقیه کدها:
+// ---- سایر دکمه‌ها و منوها (فقط یکبار switch) ----
 switch (data) {
   case 'calculate_rate':
   case 'calculate_wl':
     if (user.points <= 0) {
       return bot.answerCallbackQuery(query.id, { text: 'شما امتیازی برای استفاده ندارید.', show_alert: true });
     }
-    // ...
-}
-      userState[userId] = { type: data === 'calculate_rate' ? 'rate' : 'w/l', step: 'total' };
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'تعداد کل بازی‌ها را وارد کن:');
-    case 'add_points_all':
-      if (userId !== adminId) {
-        await bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
-        return;
-      }
-      userState[userId] = { step: 'add_points_all_enter' };
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'چه مقدار امتیاز به همه اضافه شود؟ لطفا عدد وارد کنید:');
-    case 'referral':
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, `می‌خوای امتیاز بیشتری بگیری؟ 🎁
+    userState[userId] = { type: data === 'calculate_rate' ? 'rate' : 'w/l', step: 'total' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'تعداد کل بازی‌ها را وارد کن:');
+
+  case 'add_points_all':
+    if (userId !== adminId) {
+      await bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
+      return;
+    }
+    userState[userId] = { step: 'add_points_all_enter' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'چه مقدار امتیاز به همه اضافه شود؟ لطفا عدد وارد کنید:');
+
+  case 'referral':
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, `می‌خوای امتیاز بیشتری بگیری؟ 🎁
 لینک اختصاصی خودتو برای دوستات بفرست!
 هر کسی که با لینک تو وارد ربات بشه، ۵ امتیاز دائمی می‌گیری ⭐️
 لینک دعوت مخصوص شما⬇️:\nhttps://t.me/mlbbratebot?start=${userId}`);
-    case 'profile':
-      await bot.answerCallbackQuery(query.id);
-      const invitesCount = user.invites || 0;
-      return bot.sendMessage(userId, `🆔 آیدی عددی: ${userId}\n⭐ امتیاز فعلی: ${user.points}\n📨 تعداد دعوتی‌ها: ${invitesCount}`);
-    case 'buy':
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, '🎁 برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:\n\n📩 @Beast3694');
-    case 'support':
-      userState[userId] = { step: 'support' };
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'شما وارد بخش پشتیبانی شده‌اید!\nپیام شما به من فوروارد خواهد شد 📤\nبرای خروج و بازگشت به منوی اصلی، دستور /start را ارسال کنید ⏪');
-    case 'help':
-      await bot.answerCallbackQuery(query.id);
-      const helpText = await getHelpText();
-      return bot.sendMessage(userId, helpText);
-    case 'add_points':
-    case 'sub_points':
-      userState[userId] = { step: 'enter_id', type: data === 'add_points' ? 'add' : 'sub' };
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'آیدی عددی کاربر را وارد کنید:');
-    case 'broadcast':
-      if (userId !== adminId) {
-        await bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
-        return;
-      }
-      userState[userId] = { step: 'broadcast' };
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'متن پیام همگانی را ارسال کنید یا /cancel برای لغو:');
-    case 'ban_user':
-      if (userId !== adminId) {
-        await bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
-        return;
-      }
-      userState[userId] = { step: 'ban_enter_id' };
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'آیدی عددی کاربر برای بن کردن را وارد کنید:');
-    case 'unban_user':
-      if (userId !== adminId) {
-        await bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
-        return;
-      }
-      userState[userId] = { step: 'unban_enter_id' };
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'آیدی عددی کاربر برای آن‌بن کردن را وارد کنید:');
-    case 'edit_help':
-      if (userId !== adminId) {
-        await bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
-        return;
-      }
-      userState[userId] = { step: 'edit_help' };
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'متن جدید راهنما را ارسال کنید یا /cancel برای لغو:');
-    case 'gift_code':
-      userState[userId] = { step: 'enter_gift_code' };
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'کد هدیه خود را وارد کنید:');
-    case 'add_gift_code':
-      if (userId !== adminId) return bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
-      userState[userId] = { step: 'add_gift_code_enter_code' };
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'کد هدیه جدید را وارد کنید:');
-    case 'add_global_gift_code':
-      if (userId !== adminId) return bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
-      userState[userId] = { step: 'add_global_gift_code_enter_code' };
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'کد هدیه همگانی جدید را وارد کنید:');
-    case 'delete_gift_code':
-      if (userId !== adminId) return bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
-      userState[userId] = { step: 'delete_gift_code_enter_code' };
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'کد هدیه برای حذف را وارد کنید:');
-    case 'list_gift_codes':
-      if (userId !== adminId) return bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
-      const codes = await listGiftCodesCombined();
-      if (!codes.length) return bot.sendMessage(userId, 'هیچ کدی وجود ندارد.');
-      let msgList = 'لیست همه کدها:\n' + codes.map(c => `کد: ${c.code} (${c.type}) - امتیاز: ${c.points}`).join('\n');
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, msgList);
-    case 'bot_stats':
-      if (userId !== adminId) {
-        await bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
-        return;
-      }
-      const snap = await get(ref(db, 'users'));
-      const users = snap.exists() ? Object.values(snap.val()) : [];
-      const activeUsers = users.filter(u => !u.banned);
-      const bannedUsers = users.filter(u => u.banned);
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, `👥 کاربران کل: ${users.length}\n✅ کاربران فعال: ${activeUsers.length}\n⛔ کاربران بن شده: ${bannedUsers.length}`);
-    default:
-      await bot.answerCallbackQuery(query.id);
-      break;
-  }
-});
+
+  case 'profile':
+    await bot.answerCallbackQuery(query.id);
+    const invitesCount = user.invites || 0;
+    return bot.sendMessage(userId, `🆔 آیدی عددی: ${userId}\n⭐ امتیاز فعلی: ${user.points}\n📨 تعداد دعوتی‌ها: ${invitesCount}`);
+
+  case 'buy':
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, '🎁 برای خرید امتیاز و دسترسی به امکانات بیشتر به پیوی زیر پیام دهید:\n\n📩 @Beast3694');
+
+  case 'support':
+    userState[userId] = { step: 'support' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'شما وارد بخش پشتیبانی شده‌اید!\nپیام شما به من فوروارد خواهد شد 📤\nبرای خروج و بازگشت به منوی اصلی، دستور /start را ارسال کنید ⏪');
+
+  case 'help':
+    await bot.answerCallbackQuery(query.id);
+    const helpText = await getHelpText();
+    return bot.sendMessage(userId, helpText);
+
+  case 'add_points':
+  case 'sub_points':
+    userState[userId] = { step: 'enter_id', type: data === 'add_points' ? 'add' : 'sub' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'آیدی عددی کاربر را وارد کنید:');
+
+  case 'broadcast':
+    if (userId !== adminId) {
+      await bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
+      return;
+    }
+    userState[userId] = { step: 'broadcast' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'متن پیام همگانی را ارسال کنید یا /cancel برای لغو:');
+
+  case 'ban_user':
+    if (userId !== adminId) {
+      await bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
+      return;
+    }
+    userState[userId] = { step: 'ban_enter_id' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'آیدی عددی کاربر برای بن کردن را وارد کنید:');
+
+  case 'unban_user':
+    if (userId !== adminId) {
+      await bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
+      return;
+    }
+    userState[userId] = { step: 'unban_enter_id' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'آیدی عددی کاربر برای آن‌بن کردن را وارد کنید:');
+
+  case 'edit_help':
+    if (userId !== adminId) {
+      await bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
+      return;
+    }
+    userState[userId] = { step: 'edit_help' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'متن جدید راهنما را ارسال کنید یا /cancel برای لغو:');
+
+  case 'gift_code':
+    userState[userId] = { step: 'enter_gift_code' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'کد هدیه خود را وارد کنید:');
+
+  case 'add_gift_code':
+    if (userId !== adminId) return bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
+    userState[userId] = { step: 'add_gift_code_enter_code' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'کد هدیه جدید را وارد کنید:');
+
+  case 'add_global_gift_code':
+    if (userId !== adminId) return bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
+    userState[userId] = { step: 'add_global_gift_code_enter_code' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'کد هدیه همگانی جدید را وارد کنید:');
+
+  case 'delete_gift_code':
+    if (userId !== adminId) return bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
+    userState[userId] = { step: 'delete_gift_code_enter_code' };
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, 'کد هدیه برای حذف را وارد کنید:');
+
+  case 'list_gift_codes':
+    if (userId !== adminId) return bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
+    const codes = await listGiftCodesCombined();
+    if (!codes.length) return bot.sendMessage(userId, 'هیچ کدی وجود ندارد.');
+    let msgList = 'لیست همه کدها:\n' + codes.map(c => `کد: ${c.code} (${c.type}) - امتیاز: ${c.points}`).join('\n');
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, msgList);
+
+  case 'bot_stats':
+    if (userId !== adminId) {
+      await bot.answerCallbackQuery(query.id, { text: 'دسترسی ندارید.', show_alert: true });
+      return;
+    }
+    const snap = await get(ref(db, 'users'));
+    const users = snap.exists() ? Object.values(snap.val()) : [];
+    const activeUsers = users.filter(u => !u.banned);
+    const bannedUsers = users.filter(u => u.banned);
+    await bot.answerCallbackQuery(query.id);
+    return bot.sendMessage(userId, `👥 کاربران کل: ${users.length}\n✅ کاربران فعال: ${activeUsers.length}\n⛔ کاربران بن شده: ${bannedUsers.length}`);
+
+  default:
+    await bot.answerCallbackQuery(query.id);
+    break;
+}
 
 // ---- اداره مراحل ثبت اسکواد ----
 // ... ناحیه message handler بدون تغییر، فقط بخش stateهای جدید اضافه شود
