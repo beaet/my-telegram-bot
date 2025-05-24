@@ -239,9 +239,9 @@ bot.onText(/\/panel/, async (msg) => {
     return bot.sendMessage(userId, 'شما دسترسی به پنل مدیریت ندارید.');
   }
   bot.sendMessage(userId, 'پنل مدیریت:', {
-    reply_markup: {
-      inline_keyboard: [
-        [
+  reply_markup: {
+    inline_keyboard: [
+      [
         { text: '➕ افزودن امتیاز', callback_data: 'add_points' },
         { text: '➖ کسر امتیاز', callback_data: 'sub_points' }
       ],
@@ -278,11 +278,13 @@ bot.onText(/\/panel/, async (msg) => {
         { text: '🔴 خاموش کردن ربات', callback_data: 'deactivate_bot' }
       ],
       [
-    { text: '🗑 حذف اسکواد تاییدشده', callback_data: 'admin_delete_approved_squads' }
-  ]
-   ]
-    }
-  });
+        { text: '🗑 حذف اسکواد تاییدشده', callback_data: 'admin_delete_approved_squads' }
+      ],
+      [
+        { text: '📋 جزییات کاربران', callback_data: 'user_details' }  // ← این خط اضافه شد
+      ]
+    ]
+  }
 });
 
 // ---- CALLBACK QUERIES ----
@@ -402,6 +404,22 @@ bot.on('callback_query', async (query) => {
     }
     userState[userId] = null;
     return;
+  }
+  
+   if (data === 'user_details') {
+    // فرض می‌کنم توی DB جدول users داری با ستون‌هایی مثل id, username, wins, losses
+    const users = await db.all("SELECT id, username, wins, losses FROM users");
+
+    if (!users.length) {
+      return bot.sendMessage(chatId, 'هیچ کاربری ثبت نشده است.');
+    }
+
+    let message = 'لیست کاربران:\n\n';
+    users.forEach(u => {
+      message += `ID: ${u.id}\nنام کاربری: ${u.username || 'ندارد'}\nبرد: ${u.wins}\nباخت: ${u.losses}\n\n`;
+    });
+
+    bot.sendMessage(chatId, message);
   }
 
   // ---- اسکواد: ثبت درخواست ----
