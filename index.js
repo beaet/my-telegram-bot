@@ -322,17 +322,20 @@ bot.onText(/\/panel/, async (msg) => {
 
 // ---- CALLBACK QUERIES ----
 bot.on('callback_query', async (query) => {
+  if (!botActive && query.from.id !== adminId) {
+    await bot.answerCallbackQuery(query.id, { text: 'ربات موقتاً خاموش است.', show_alert: true });
+    return;
+  }
+
   const userId = query.from.id;
   const data = query.data;
   const messageId = query.message && query.message.message_id;
   const currentText = query.message.text;
   const currentMarkup = query.message.reply_markup || null;
-  
-  bot.on('callback_query', async (query) => {
-  if (!botActive && query.from.id !== adminId) {
-    await bot.answerCallbackQuery(query.id, { text: 'ربات موقتاً خاموش است.', show_alert: true });
-    return;
-  }
+
+  // بقیه کد همین تابع (همه‌ی سوییچ‌ها، ifها و ...)
+
+});
   // ادامه کد قبلی...
 
   // فرض بر این که می‌خواهی منوی اصلی را نمایش بدهی
@@ -1101,7 +1104,7 @@ let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: $
 }
 
 app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
-});
+    console.log(`Server is running on port ${port}`);
+  });
 
-})(); 
+})();
