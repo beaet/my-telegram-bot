@@ -243,12 +243,6 @@ async function getBotActive() {
   }
 }
 
-  await ensureUser(msg.from);
-  const user = await getUser(userId);
-  if (user?.banned) {
-    return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده از ربات را ندارید.');
-  }
-
   if (refId && refId !== userId) {
     const refUser = await getUser(refId);
     if (refUser && !user.invited_by) {
@@ -344,6 +338,12 @@ bot.on('callback_query', async (query) => {
       return;
     }
   }
+  
+  await ensureUser(query.from);
+const user = await getUser(userId);
+if (user?.banned) {
+  return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده از ربات را ندارید.');
+}
 
 if (userId !== adminId) {
   return bot.answerCallbackQuery(query.id, { text: 'شما دسترسی ندارید.', show_alert: true });
