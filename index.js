@@ -243,10 +243,6 @@ async function getBotActive() {
   }
 }
 
-  userState[userId] = null;
-  sendMainMenu(userId);
-});
-
 // ---- Panel for admin ----
 bot.onText(/\/panel/, async (msg) => {
   const userId = msg.from.id;
