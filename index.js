@@ -67,13 +67,17 @@ async function getAllUsersFromDatabase() {
   });
 }
 
+function settingsRef(key) {
+  return ref(db, `settings/${key}`);
+}
+
 async function setBotActive(status) {
   await set(settingsRef('botActive'), status);
 }
 
 async function getBotActive() {
   const snapshot = await get(settingsRef('botActive'));
-  return snapshot.exists() ? snapshot.val() : true; // پیش‌فرض روشن
+  return snapshot.exists() ? snapshot.val() : true; // پیش‌فرض: روشن
 }
 
 // ---- Gift Code helpers ----
