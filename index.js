@@ -340,30 +340,22 @@ bot.on('callback_query', async (query) => {
   }
 
 if (userId !== adminId) {
-      return bot.answerCallbackQuery(query.id, { text: 'شما دسترسی ندارید.', show_alert: true });
-    }
+  return bot.answerCallbackQuery(query.id, { text: 'شما دسترسی ندارید.', show_alert: true });
+}
 
-    if (data === 'activate_bot') {
-      await setBotActive(true);
-      console.log('ربات روشن شد');
-      await bot.answerCallbackQuery(query.id, { text: 'ربات روشن شد.' });
-      // ارسال یا ویرایش پیام پنل در صورت نیاز
-    } else if (data === 'deactivate_bot') {
-      await setBotActive(false);
-      console.log('ربات خاموش شد');
-      await bot.answerCallbackQuery(query.id, { text: 'ربات خاموش شد.' });
-    }
-
+try {
+  if (data === 'activate_bot') {
+    await setBotActive(true);
+    console.log('ربات روشن شد');
+    await bot.answerCallbackQuery(query.id, { text: 'ربات روشن شد.' });
+  } else if (data === 'deactivate_bot') {
+    await setBotActive(false);
+    console.log('ربات خاموش شد');
+    await bot.answerCallbackQuery(query.id, { text: 'ربات خاموش شد.' });
+  }
 } catch (error) {
   console.error('خطا در callback_query:', error);
 }
-
-  // ---- Main menu back ----
-  if (data === 'main_menu') {
-    await bot.answerCallbackQuery(query.id);
-    sendMainMenu(userId, messageId);
-    return;
-  }
 
   // ---- Main menu back ----
   if (data === 'main_menu') {
