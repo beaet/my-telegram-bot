@@ -694,6 +694,12 @@ bot.on('callback_query', async (query) => {
       await bot.answerCallbackQuery(query.id);
       break;
   }
+default:
+  await bot.answerCallbackQuery(query.id);
+  break;
+}  // <-- این } برای بستن switch یا بلوک است
+
+// اینجا ادامه کد اصلی:
 bot.on('message', async (msg) => {
   const userId = msg.from.id;
   const text = msg.text || '';
@@ -704,7 +710,7 @@ bot.on('message', async (msg) => {
     return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده ندارید.');
   }
 
-  // ---- پاسخ به پشتیبانی توسط ادمین ----
+  // پاسخ به پشتیبانی توسط ادمین
   if (msg.reply_to_message && userId === adminId) {
     const replied = msg.reply_to_message;
     const targetUserId = supportChatMap[replied.message_id];
@@ -713,6 +719,7 @@ bot.on('message', async (msg) => {
       return bot.sendMessage(adminId, '✅ پیام شما به کاربر ارسال شد.');
     }
   }
+}); // <-- این } بسته شدن فانکشن bot.on('message') است
 
   const state = userState[userId];
   if (!state) return;
