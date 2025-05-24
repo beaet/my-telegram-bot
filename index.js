@@ -406,21 +406,19 @@ bot.on('callback_query', async (query) => {
     return;
   }
   
-   if (data === 'user_details') {
-    // فرض می‌کنم توی DB جدول users داری با ستون‌هایی مثل id, username, wins, losses
-    const users = await db.all("SELECT id, username, wins, losses FROM users");
+  bot.on('callback_query', async (query) => {
+  const data = query.data;
+  const userId = query.from.id;
+  const chatId = query.message.chat.id;
 
-    if (!users.length) {
-      return bot.sendMessage(chatId, 'هیچ کاربری ثبت نشده است.');
-    }
-
-    let message = 'لیست کاربران:\n\n';
-    users.forEach(u => {
-      message += `ID: ${u.id}\nنام کاربری: ${u.username || 'ندارد'}\nبرد: ${u.wins}\nباخت: ${u.losses}\n\n`;
-    });
-
-    bot.sendMessage(chatId, message);
+  if (data === 'user_details') {
+    // کد نمایش کاربران
+  } else if (data === 'squad_request') {
+    // کد ثبت اسکواد
   }
+  // ... بقیه شرط‌ها
+
+});  // <-- این } پایانی هندلر باید باشه
 
   // ---- اسکواد: ثبت درخواست ----
   if (data === 'squad_request') {
