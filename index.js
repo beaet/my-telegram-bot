@@ -1150,9 +1150,8 @@ bot.on('message', async (msg) => {
 });
 
 // ---- نمایش کارت اسکواد با ورق‌زنی (عمومی) ----
- function showSquadCard(userId, reqs, idx, messageId) {
-  // کدت اینجا
-}
+ // ---- نمایش کارت اسکواد با ورق‌زنی (عمومی) ----
+function showSquadCard(userId, reqs, idx, messageId) {
   if (reqs.length === 0) {
     if (messageId) {
       return bot.editMessageText('هیچ اسکوادی وجود ندارد.', {
@@ -1177,7 +1176,7 @@ bot.on('message', async (msg) => {
   if (idx < 0) idx = 0;
   if (idx >= reqs.length) idx = reqs.length - 1;
   const req = reqs[idx];
-let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: ${req.roles_needed}\n👤آیدی تاگرام لیدر: ${req.game_id || '-'}\n🏅رنک: ${req.min_rank}\n📝توضیحات: ${req.details}\n`;
+  let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: ${req.roles_needed}\n👤آیدی تاگرام لیدر: ${req.game_id || '-'}\n🏅رنک: ${req.min_rank}\n📝توضیحات: ${req.details}\n`;
   txt += `\n🖌️درخواست‌دهنده: ${req.user_id}`;
   let buttons = [];
   if (reqs.length > 1) {
