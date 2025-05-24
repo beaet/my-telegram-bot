@@ -354,10 +354,9 @@ if (userId !== adminId) {
       await bot.answerCallbackQuery(query.id, { text: 'ربات خاموش شد.' });
     }
 
-  } catch (error) {
-    console.error('خطا در callback_query:', error);
-    });
-  }
+} catch (error) {
+  console.error('خطا در callback_query:', error);
+}
 
   // ---- Main menu back ----
   if (data === 'main_menu') {
