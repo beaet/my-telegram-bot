@@ -10,6 +10,7 @@ const token = process.env.BOT_TOKEN;
 const adminId = Number(process.env.ADMIN_ID);
 const webhookUrl = process.env.WEBHOOK_URL;
 const port = process.env.PORT || 10000;
+let botActive = true
 
 // ---- Firebase Config ----
 const firebaseConfig = {
@@ -65,15 +66,6 @@ async function getAllUsersFromDatabase() {
       else resolve(rows);
     });
   });
-}
-
-async function setBotActive(status) {
-  await set(settingsRef('botActive'), status);
-}
-
-async function getBotActive() {
-  const snapshot = await get(settingsRef('botActive'));
-  return snapshot.exists() ? snapshot.val() : true; // پیش‌فرض: روشن
 }
 
 // ---- Gift Code helpers ----
@@ -228,20 +220,27 @@ function sendMainMenu(userId, messageId = null, currentText = null, currentMarku
 }
 
 // ---- /start with referral ----
-async function setBotActive(state) {
-  const refPath = ref(db, 'settings/botActive');
-  await set(refPath, state);
-}
+bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
+  const userId = msg.from.id;
+  const refId = match[1] ? parseInt(match[1]) : null;
 
-async function getBotActive() {
-  try {
-    const snapshot = await get(ref(db, 'settings/botActive'));
-    return snapshot.exists() ? snapshot.val() : true; // پیش‌فرض روشن
-  } catch (error) {
-    console.error('خطا در خواندن وضعیت فعال بودن ربات:', error);
-    return true; // پیش‌فرض اگر مشکلی پیش اومد
+  await ensureUser(msg.from);
+  const user = await getUser(userId);
+  if (user?.banned) {
+    return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده از ربات را ندارید.');
   }
-}
+  if (refId && refId !== userId) {
+    const refUser = await getUser(refId);
+    if (refUser && !user.invited_by) {
+      await update(userRef(userId), { invited_by: refId });
+      await updatePoints(refId, 5);
+      await update(userRef(refId), { invites: (refUser.invites || 0) + 1 });
+      bot.sendMessage(refId, `🎉 یک نفر با لینک دعوت شما وارد ربات شد و ۵ امتیاز گرفتید!`);
+    }
+  }
+  userState[userId] = null;
+  sendMainMenu(userId);
+});
 
 // ---- Panel for admin ----
 bot.onText(/\/panel/, async (msg) => {
@@ -307,6 +306,26 @@ bot.on('callback_query', async (query) => {
   const currentText = query.message.text;
   const currentMarkup = query.message.reply_markup || null;
 
+  // فرض بر این که می‌خواهی منوی اصلی را نمایش بدهی
+  
+    if (data === 'deactivate_bot' && userId === adminId) {
+    botActive = false;
+    await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی خاموش شد.' });
+    // ... پنل را آپدیت کن
+    return;
+  }
+  if (data === 'activate_bot' && userId === adminId) {
+    botActive = true;
+    await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی روشن شد.' });
+    // ... پنل را آپدیت کن
+    return;
+  }
+  
+    if (!botActive && userId !== adminId) {
+    await bot.answerCallbackQuery(query.id, { text: 'ربات موقتاً خاموش است.', show_alert: true });
+    return;
+  }
+
   // ---- Anti-Spam ----
   if (userId !== adminId) {
     if (isMuted(userId)) {
@@ -324,46 +343,6 @@ bot.on('callback_query', async (query) => {
       return;
     }
   }
-  
-  if (refId && refId !== userId) {
-    const refUser = await getUser(refId);
-    if (refUser && !user.invited_by) {
-      await update(userRef(userId), { invited_by: refId });
-      await updatePoints(refId, 5);
-      await update(userRef(refId), { invites: (refUser.invites || 0) + 1 });
-      bot.sendMessage(refId, `🎉 یک نفر با لینک دعوت شما وارد ربات شد و ۵ امتیاز گرفتید!`);
-    }
-  }
-  
-  await ensureUser(query.from);
-const user = await getUser(userId);
-if (user?.banned) {
-  return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده از ربات را ندارید.');
-}
-
-if (userId !== adminId) {
-  return bot.answerCallbackQuery(query.id, { text: 'شما دسترسی ندارید.', show_alert: true });
-}
-
-if (data === 'activate_bot') {
-  try {
-    await setBotActive(true);
-    console.log('ربات روشن شد');
-    await bot.answerCallbackQuery(query.id, { text: 'ربات روشن شد.' });
-  } catch (error) {
-    console.error('خطا در روشن کردن ربات:', error);
-    await bot.answerCallbackQuery(query.id, { text: 'خطا در روشن کردن ربات.' });
-  }
-} else if (data === 'deactivate_bot') {
-  try {
-    await setBotActive(false);
-    console.log('ربات خاموش شد');
-    await bot.answerCallbackQuery(query.id, { text: 'ربات خاموش شد.' });
-  } catch (error) {
-    console.error('خطا در خاموش کردن ربات:', error);
-    await bot.answerCallbackQuery(query.id, { text: 'خطا در خاموش کردن ربات.' });
-  }
-}
 
   // ---- Main menu back ----
   if (data === 'main_menu') {
@@ -371,7 +350,7 @@ if (data === 'activate_bot') {
     sendMainMenu(userId, messageId);
     return;
   }
-  
+
   const user = await getUser(userId);
   if (!user) return await bot.answerCallbackQuery(query.id, { text: 'خطا در دریافت اطلاعات کاربر.', show_alert: true });
   if (user?.banned) return await bot.answerCallbackQuery(query.id, { text: 'شما بن شده‌اید و اجازه استفاده ندارید.', show_alert: true });
