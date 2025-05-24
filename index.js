@@ -1029,21 +1029,26 @@ async function showSquadCard(userId, reqs, idx, messageId) {
 }
 
 // ---- نمایش کارت اسکواد ادمین با ورق‌زنی و دکمه تایید/حذف ----
+// نمایش کارت درخواست اسکواد برای ادمین
 async function showAdminSquadCard(userId, reqs, idx) {
   if (reqs.length === 0)
     return bot.sendMessage(userId, 'درخواستی وجود ندارد.');
   if (idx < 0) idx = 0;
   if (idx >= reqs.length) idx = reqs.length - 1;
+
   const req = reqs[idx];
-let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: ${req.roles_needed}\n👤آیدی تاگرام لیدر: ${req.game_id || '-'}\n🏅رنک: ${req.min_rank}\n📝توضیحات: ${req.details}\n`;
+  let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: ${req.roles_needed}\n👤آیدی تاگرام لیدر: ${req.game_id || '-'}\n🏅رنک: ${req.min_rank}\n📝توضیحات: ${req.details}\n`;
   txt += `\n🖌️درخواست‌دهنده: ${req.user_id}`;
+
   const navBtns = [];
   if (idx > 0) navBtns.push({ text: '⬅️ قبلی', callback_data: `admin_squad_card_${idx - 1}` });
   if (idx < reqs.length - 1) navBtns.push({ text: 'بعدی ➡️', callback_data: `admin_squad_card_${idx + 1}` });
+
   const actionBtns = [
     { text: 'تایید ✅', callback_data: `approve_squadreq_${req.id}` },
     { text: 'حذف ❌', callback_data: `delete_squadreq_${req.id}` }
   ];
+
   bot.sendMessage(userId, txt, {
     reply_markup: {
       inline_keyboard: [actionBtns, navBtns.length ? navBtns : []]
@@ -1051,21 +1056,25 @@ let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: $
   });
 }
 
-// ---- نمایش کارت اسکواد تایید شده برای حذف توسط ادمین ----
+// نمایش کارت اسکواد تایید شده برای حذف توسط ادمین
 async function showAdminApprovedSquadCard(userId, reqs, idx) {
   if (reqs.length === 0)
     return bot.sendMessage(userId, 'اسکواد تاییدشده‌ای وجود ندارد.');
   if (idx < 0) idx = 0;
   if (idx >= reqs.length) idx = reqs.length - 1;
+
   const req = reqs[idx];
-let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: ${req.roles_needed}\n👤آیدی تاگرام لیدر: ${req.game_id || '-'}\n🏅رنک: ${req.min_rank}\n📝توضیحات: ${req.details}\n`;
+  let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: ${req.roles_needed}\n👤آیدی تاگرام لیدر: ${req.game_id || '-'}\n🏅رنک: ${req.min_rank}\n📝توضیحات: ${req.details}\n`;
   txt += `\n🖌️درخواست‌دهنده: ${req.user_id}`;
+
   const navBtns = [];
   if (idx > 0) navBtns.push({ text: '⬅️ قبلی', callback_data: `admin_approved_squad_card_${idx - 1}` });
   if (idx < reqs.length - 1) navBtns.push({ text: 'بعدی ➡️', callback_data: `admin_approved_squad_card_${idx + 1}` });
+
   const actionBtns = [
     { text: '🗑 حذف اسکواد', callback_data: `admin_delete_approved_squadreq_${req.id}` }
   ];
+
   bot.sendMessage(userId, txt, {
     reply_markup: {
       inline_keyboard: [actionBtns, navBtns.length ? navBtns : []]
@@ -1073,6 +1082,7 @@ let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: $
   });
 }
 
+// راه‌اندازی سرور اکسپرس
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
