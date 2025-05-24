@@ -249,7 +249,7 @@ bot.on('message', async (msg) => {
   if (!state || !state.step) return; // اگر کاربر در فرآیند خاصی نیست، رد شو
 
   console.log('User message:', userId, text, state);
-});
+
 
 // ---- Panel for admin ----
 bot.onText(/\/panel/, async (msg) => {
