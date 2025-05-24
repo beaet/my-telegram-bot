@@ -155,15 +155,18 @@ const userState = {};
 const supportChatMap = {};
 
 // ---- Bot Init ----
-const bot = new TelegramBot(token, { polling: false });
-bot.setWebHook(`${webhookUrl}/bot${token}`);
+(async () => {
+  await fetchBotActiveStatus();
+  // اینجا بقیه کدهای bot و express را بنویس
+  // مثلاً:
+  const bot = new TelegramBot(token, { polling: false });
+  bot.setWebHook(`${webhookUrl}/bot${token}`);
 
-app.use(express.json());
-app.post(`/bot${token}`, (req, res) => {
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
-});
-
+  app.use(express.json());
+  app.post(`/bot${token}`, (req, res) => {
+    bot.processUpdate(req.body);
+    res.sendStatus(200);
+  });
 // ---- Main Menu ----
 function mainMenuKeyboard() {
   return {
@@ -242,6 +245,21 @@ bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
   sendMainMenu(userId);
 });
 
+// ---- Bot Active State with Firebase ----
+async function setBotActiveStatus(isActive) {
+  await set(ref(db, 'settings/bot_active'), isActive ? 1 : 0);
+  botActive = !!isActive;
+}
+
+async function fetchBotActiveStatus() {
+  const snap = await get(ref(db, 'settings/bot_active'));
+  if (snap.exists()) {
+    botActive = !!snap.val();
+  } else {
+    botActive = true; // اگر موجود نبود، به طور پیش‌فرض فعال است
+  }
+}
+
 // ---- Panel for admin ----
 bot.onText(/\/panel/, async (msg) => {
   const userId = msg.from.id;
@@ -308,23 +326,16 @@ bot.on('callback_query', async (query) => {
 
   // فرض بر این که می‌خواهی منوی اصلی را نمایش بدهی
   
-    if (data === 'deactivate_bot' && userId === adminId) {
-    botActive = false;
-    await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی خاموش شد.' });
-    // ... پنل را آپدیت کن
-    return;
-  }
-  if (data === 'activate_bot' && userId === adminId) {
-    botActive = true;
-    await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی روشن شد.' });
-    // ... پنل را آپدیت کن
-    return;
-  }
-  
-    if (!botActive && userId !== adminId) {
-    await bot.answerCallbackQuery(query.id, { text: 'ربات موقتاً خاموش است.', show_alert: true });
-    return;
-  }
+if (data === 'deactivate_bot' && userId === adminId) {
+  await setBotActiveStatus(false);
+  await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی خاموش شد.' });
+  return;
+}
+if (data === 'activate_bot' && userId === adminId) {
+  await setBotActiveStatus(true);
+  await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی روشن شد.' });
+  return;
+}
 
   // ---- Anti-Spam ----
   if (userId !== adminId) {
