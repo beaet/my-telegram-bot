@@ -19,6 +19,17 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getDatabase(firebaseApp);
 
+const dynamicButtonsRef = ref(db, 'settings/dynamic_buttons');
+
+async function getDynamicButtons() {
+  const snap = await get(dynamicButtonsRef);
+  return snap.exists() ? snap.val() : {};
+}
+
+async function saveDynamicButtons(buttons) {
+  await set(dynamicButtonsRef, buttons);
+}
+
 // ---- User Helper Functions ----
 const userRef = userId => ref(db, `users/${userId}`);
 async function ensureUser(user) {
@@ -157,7 +168,7 @@ const supportChatMap = {};
 // ---- Bot Init ----
 (async () => {
   await fetchBotActiveStatus();
-  // اینجا بقیه کدهای bot و expressرا بنویس
+  // اینجا بقیه کدهای bot و express را بنویس
   // مثلاً:
   const bot = new TelegramBot(token, { polling: false });
   bot.setWebHook(`${webhookUrl}/bot${token}`);
@@ -204,6 +215,17 @@ function mainMenuKeyboard() {
     }
   };
 }
+
+const dynButtonsSnap = await get(ref(db, 'dynamic_buttons'));
+const dynButtons = dynButtonsSnap.exists() ? Object.values(dynButtonsSnap.val()) : [];
+
+const dynButtonRow = dynButtons.map(btn => ({
+  text: btn.text,
+  callback_data: `dynbtn_${btn.id}`
+}));
+
+reply_markup.inline_keyboard.push(dynButtonRow);
+
 function sendMainMenu(userId, messageId = null, currentText = null, currentMarkup = null) {
   const text = 'سلام، به ربات محاسبه‌گر Mobile Legends خوش آمدید ✨';
   const { reply_markup } = mainMenuKeyboard();
@@ -306,6 +328,9 @@ bot.onText(/\/panel/, async (msg) => {
           { text: '🔍 مدیریت اسکوادها', callback_data: 'admin_squad_list' }
         ],
         [
+                  { text: '➕ ساخت دکمه پویا', callback_data: 'create_dynamic_button' }
+        ],
+        [
           { text: '🟢 روشن کردن ربات', callback_data: 'activate_bot' },
           { text: '🔴 خاموش کردن ربات', callback_data: 'deactivate_bot' }
         ],
@@ -390,6 +415,57 @@ if (data === 'activate_bot' && userId === adminId) {
       }
     );
   }
+  
+if (data === 'create_button' && userId === adminId) {
+  const snapshot = await get(ref(db, 'dynamic_buttons'));
+  const buttons = snapshot.exists() ? snapshot.val() : {};
+  const buttonList = Object.keys(buttons);
+
+  const rows = buttonList.map((key) => [
+    { text: `➕ کنار "${buttons[key].text}"`, callback_data: `add_near_${key}` }
+  ]);
+
+  rows.push([{ text: '➕ اضافه به آخر', callback_data: 'add_near_end' }]);
+  rows.push([{ text: 'بازگشت 🔙', callback_data: 'panel_back' }]);
+
+  await bot.editMessageText('انتخاب کن دکمه جدید کجا قرار بگیره:', {
+    chat_id: userId,
+    message_id: messageId,
+    reply_markup: { inline_keyboard: rows }
+  });
+  return;
+}
+
+if (data.startsWith('add_near_')) {
+  const positionKey = data.replace('add_near_', '');
+  userState[userId] = { step: 'await_button_text', positionKey };
+  await bot.sendMessage(userId, 'لطفاً متن دکمه جدید را وارد کن:');
+  return;
+}
+
+if (data.startsWith('btn_resp_type_')) {
+  const type = data === 'btn_resp_type_msg' ? 'message' : 'alert';
+  const state = userState[userId];
+  state.step = 'await_button_response_text';
+  state.responseType = type;
+  await bot.sendMessage(userId, 'متن پاسخ دکمه رو بنویس:');
+  return;
+}
+
+if (data.startsWith('dynbtn_')) {
+  const id = data.replace('dynbtn_', '');
+  const snap = await get(ref(db, `dynamic_buttons/${id}`));
+  if (!snap.exists()) return;
+
+  const button = snap.val();
+  if (button.responseType === 'alert') {
+    await bot.answerCallbackQuery(query.id, { text: button.responseText, show_alert: true });
+  } else {
+    await bot.sendMessage(userId, button.responseText);
+  }
+  return;
+}
+
 
   // ---- بخش شانس ----
   if (data === 'chance') {
@@ -751,6 +827,94 @@ bot.on('message', async (msg) => {
 if (!botActive && msg.from.id !== adminId) {
     return bot.sendMessage(msg.from.id, "ربات موقتاً خاموش است.");
   }
+  
+  if (userState[userId]?.step === 'await_button_text') {
+  const { positionKey } = userState[userId];
+  userState[userId] = { step: 'await_button_response_type', positionKey, buttonText: msg.text };
+  await bot.sendMessage(userId, 'چه نوع پاسخی داشته باشه؟', {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: 'ارسال پیام متنی', callback_data: 'btn_resp_type_msg' },
+          { text: 'اعلان (Alert)', callback_data: 'btn_resp_type_alert' }
+        ]
+      ]
+    }
+  });
+  return;
+}
+  
+  if (userState[userId]?.step === 'await_button_response_text') {
+  const { positionKey, buttonText, responseType } = userState[userId];
+  const responseText = msg.text;
+  const buttonId = Date.now(); // یا uuid
+
+  const newButton = {
+    id: buttonId,
+    text: buttonText,
+    responseType,
+    responseText
+  };
+
+  const snapshot = await get(ref(db, 'dynamic_buttons'));
+  const existingButtons = snapshot.exists() ? snapshot.val() : {};
+
+  let buttonsArray = Object.entries(existingButtons);
+
+  if (positionKey === 'end') {
+    buttonsArray.push([buttonId, newButton]);
+  } else {
+    const index = buttonsArray.findIndex(([key]) => key === positionKey);
+    if (index >= 0) {
+      buttonsArray.splice(index + 1, 0, [buttonId, newButton]);
+    } else {
+      buttonsArray.push([buttonId, newButton]);
+    }
+  }
+
+  const updatedButtons = Object.fromEntries(buttonsArray);
+  await set(ref(db, 'dynamic_buttons'), updatedButtons);
+
+  await bot.sendMessage(userId, '✅ دکمه ذخیره شد و به منوی کاربران اضافه شد.');
+  userState[userId] = null;
+  return;
+}
+  
+  if (userState[userId]?.step === 'await_button_response_text') {
+  const { positionKey, buttonText, responseType } = userState[userId];
+  const responseText = msg.text;
+  const buttonId = Date.now(); // یا uuid
+
+  const newButton = {
+    id: buttonId,
+    text: buttonText,
+    responseType,
+    responseText
+  };
+
+  const snapshot = await get(ref(db, 'dynamic_buttons'));
+  const existingButtons = snapshot.exists() ? snapshot.val() : {};
+
+  let buttonsArray = Object.entries(existingButtons);
+
+  if (positionKey === 'end') {
+    buttonsArray.push([buttonId, newButton]);
+  } else {
+    const index = buttonsArray.findIndex(([key]) => key === positionKey);
+    if (index >= 0) {
+      buttonsArray.splice(index + 1, 0, [buttonId, newButton]);
+    } else {
+      buttonsArray.push([buttonId, newButton]);
+    }
+  }
+
+  const updatedButtons = Object.fromEntries(buttonsArray);
+  await set(ref(db, 'dynamic_buttons'), updatedButtons);
+
+  await bot.sendMessage(userId, '✅ دکمه ذخیره شد و به منوی کاربران اضافه شد.');
+  userState[userId] = null;
+  return;
+}
   
   if (user?.banned) {
     return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده ندارید.');
