@@ -5,6 +5,7 @@ const { initializeApp } = require('firebase/app');
 const { getDatabase, ref, set, get, update, remove, push } = require('firebase/database');
 const axios = require('axios');
 const app = express();
+const userState = {};
 
 const token = process.env.BOT_TOKEN;
 const adminId = Number(process.env.ADMIN_ID);
@@ -161,7 +162,6 @@ function isMuted(userId) {
 }
 
 // ---- User State ----
-const userState = {};
 const supportChatMap = {};
 
 // ---- Bot Init ----
