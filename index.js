@@ -415,6 +415,8 @@ bot.on('callback_query', async (query) => {
     }
     userState[userId] = null;
     return;
+  }
+  
   } else if (data === 'squad_request') {
     // کد ثبت اسکواد
   }
