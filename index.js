@@ -10,7 +10,12 @@ const token = process.env.BOT_TOKEN;
 const adminId = Number(process.env.ADMIN_ID);
 const webhookUrl = process.env.WEBHOOK_URL;
 const port = process.env.PORT || 10000;
-let botActive = true
+let botActive = true;
+
+// تعریف bot قبل از استفاده
+const bot = new TelegramBot(token, { polling: false });
+bot.setWebHook(${webhookUrl}/bot${token});
+
 
 // ---- Firebase Config ----
 const firebaseConfig = {
@@ -19,18 +24,8 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getDatabase(firebaseApp);
 
-const dynamicButtonsRef = ref(db, 'settings/dynamic_buttons');
-
-async function getDynamicButtons() {
-  const snap = await get(dynamicButtonsRef);
-  return snap.exists() ? snap.val() : {};
-}
-
-async function saveDynamicButtons(buttons) {
-  await set(dynamicButtonsRef, buttons);
-}
-
 // ---- User Helper Functions ----
+bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
 const userRef = userId => ref(db, `users/${userId}`);
 async function ensureUser(user) {
   const snap = await get(userRef(user.id));
@@ -78,6 +73,18 @@ async function getAllUsersFromDatabase() {
     });
   });
 }
+
+const dynamicButtonsRef = ref(db, 'settings/dynamic_buttons');
+
+async function getDynamicButtons() {
+  const snap = await get(dynamicButtonsRef);
+  return snap.exists() ? snap.val() : {};
+}
+
+async function saveDynamicButtons(buttons) {
+  await set(dynamicButtonsRef, buttons);
+}
+
 
 // ---- Gift Code helpers ----
 const giftCodeRef = code => ref(db, `gift_codes/${code}`);
@@ -269,7 +276,6 @@ async function sendMainMenu(userId, messageId = null, currentText = null, curren
 }
 
 // ---- /start with referral ----
-bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
   const userId = msg.from.id;
   const refId = match[1] ? parseInt(match[1]) : null;
   
