@@ -339,23 +339,23 @@ bot.on('callback_query', async (query) => {
     }
   }
 
-  if (userId !== adminId) {
-    return bot.answerCallbackQuery(query.id, { text: 'شما دسترسی ندارید.', show_alert: true });
-  }
+if (userId !== adminId) {
+      return bot.answerCallbackQuery(query.id, { text: 'شما دسترسی ندارید.', show_alert: true });
+    }
 
-  if (data === 'activate_bot') {
-    await setBotActive(true);
-    await bot.answerCallbackQuery(query.id, { text: 'ربات روشن شد.' });
-    await bot.editMessageReplyMarkup(query.message.reply_markup, {
-      chat_id: query.message.chat.id,
-      message_id: query.message.message_id
-    });
-  } else if (data === 'deactivate_bot') {
-    await setBotActive(false);
-    await bot.answerCallbackQuery(query.id, { text: 'ربات خاموش شد.' });
-    await bot.editMessageReplyMarkup(query.message.reply_markup, {
-      chat_id: query.message.chat.id,
-      message_id: query.message.message_id
+    if (data === 'activate_bot') {
+      await setBotActive(true);
+      console.log('ربات روشن شد');
+      await bot.answerCallbackQuery(query.id, { text: 'ربات روشن شد.' });
+      // ارسال یا ویرایش پیام پنل در صورت نیاز
+    } else if (data === 'deactivate_bot') {
+      await setBotActive(false);
+      console.log('ربات خاموش شد');
+      await bot.answerCallbackQuery(query.id, { text: 'ربات خاموش شد.' });
+    }
+
+  } catch (error) {
+    console.error('خطا در callback_query:', error);
     });
   }
 
