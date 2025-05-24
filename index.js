@@ -965,10 +965,11 @@ async function showSquadCard(userId, reqs, idx, messageId) {
       });
     }
   }
+
   if (idx < 0) idx = 0;
   if (idx >= reqs.length) idx = reqs.length - 1;
   const req = reqs[idx];
-let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: ${req.roles_needed}\n👤آیدی تاگرام لیدر: ${req.game_id || '-'}\n🏅رنک: ${req.min_rank}\n📝توضیحات: ${req.details}\n`;
+  let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: ${req.roles_needed}\n👤آیدی تاگرام لیدر: ${req.game_id || '-'}\n🏅رنک: ${req.min_rank}\n📝توضیحات: ${req.details}\n`;
   txt += `\n🖌️درخواست‌دهنده: ${req.user_id}`;
   let buttons = [];
   if (reqs.length > 1) {
@@ -981,29 +982,30 @@ let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: $
     buttons = [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }];
   }
 
-if (messageId) {
-  try {
-    await bot.editMessageText(txt, {
-      chat_id: userId,
-      message_id: messageId,
+  if (messageId) {
+    try {
+      await bot.editMessageText(txt, {
+        chat_id: userId,
+        message_id: messageId,
+        reply_markup: {
+          inline_keyboard: [buttons]
+        }
+      });
+    } catch (e) {
+      if (
+        e.response?.body?.description !== 'Bad Request: message is not modified'
+      ) {
+        console.error('خطا در editMessageText:', e);
+      }
+    }
+  } else {
+    await bot.sendMessage(userId, txt, {
       reply_markup: {
         inline_keyboard: [buttons]
       }
     });
-  } catch (e) {
-    if (
-      e.response?.body?.description !== 'Bad Request: message is not modified'
-    ) {
-      console.error('خطا در editMessageText:', e);
-    }
   }
-} else {
-  await bot.sendMessage(userId, txt, {
-    reply_markup: {
-      inline_keyboard: [buttons]
-    }
-  });
-}
+} // <-- این } باید اضافه بشه
 
 // ---- نمایش کارت اسکواد ادمین با ورق‌زنی و دکمه تایید/حذف ----
 async function showAdminSquadCard(userId, reqs, idx) {
