@@ -228,8 +228,9 @@ reply_markup.inline_keyboard.push(dynButtonRow);
 
 async function sendMainMenu(userId, messageId = null, currentText = null, currentMarkup = null) {
   const text = 'سلام، به ربات محاسبه‌گر Mobile Legends خوش آمدید ✨';
-  const { reply_markup } = mainMenuKeyboard();
+  const { reply_markup } = mainMenuKeyboard(); // تعریف درست
 
+  // گرفتن دکمه‌های پویا از Firebase
   const dynButtonsSnap = await get(ref(db, 'dynamic_buttons'));
   const dynButtons = dynButtonsSnap.exists() ? Object.values(dynButtonsSnap.val()) : [];
 
@@ -238,8 +239,21 @@ async function sendMainMenu(userId, messageId = null, currentText = null, curren
       text: btn.text,
       callback_data: `dynbtn_${btn.id}`
     }));
-    reply_markup.inline_keyboard.push(dynButtonRow);
+    reply_markup.inline_keyboard.push(dynButtonRow); // اضافه کردن به کیبورد
   }
+
+  if (messageId) {
+    if (text !== currentText || JSON.stringify(reply_markup) !== JSON.stringify(currentMarkup)) {
+      await bot.editMessageText(text, {
+        chat_id: userId,
+        message_id: messageId,
+        reply_markup
+      });
+    }
+  } else {
+    await bot.sendMessage(userId, text, { reply_markup });
+  }
+}
 
   if (messageId) {
     if (text !== currentText || JSON.stringify(reply_markup) !== JSON.stringify(currentMarkup)) {
