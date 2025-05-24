@@ -290,25 +290,93 @@ bot.onText(/\/panel/, async (msg) => {
 bot.on('callback_query', async (query) => {
   const userId = query.from.id;
   const data = query.data;
-  // ...
 
+  // ----- دکمه‌های روشن/خاموش ربات و مدیریت اسکواد (ادمین) باید بالاتر از شرط خاموش بودن باشد -----
+  if (userId === adminId) {
+    if (data === 'activate_bot') {
+      botActive = true;
+      await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی روشن شد.' });
+      return;
+    }
+    if (data === 'deactivate_bot') {
+      botActive = false;
+      await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی خاموش شد.' });
+      return;
+    }
+    // مدیریت اسکواد (ادمین)
+    if (data === 'admin_squad_list') {
+      const pendingReqs = await getAllSquadReqs({ approved: false });
+      if (!pendingReqs.length) {
+        await bot.answerCallbackQuery(query.id);
+        return bot.sendMessage(userId, 'درخواستی برای بررسی وجود ندارد.');
+      }
+      showAdminSquadCard(userId, pendingReqs, 0);
+      await bot.answerCallbackQuery(query.id);
+      return;
+    }
+    if (data.startsWith('admin_squad_card_')) {
+      const idx = parseInt(data.replace('admin_squad_card_', ''));
+      const pendingReqs = await getAllSquadReqs({ approved: false });
+      showAdminSquadCard(userId, pendingReqs, idx);
+      await bot.answerCallbackQuery(query.id);
+      return;
+    }
+    if (data.startsWith('approve_squadreq_')) {
+      const reqId = data.replace('approve_squadreq_', '');
+      const req = await getSquadReq(reqId);
+      if (!req || req.approved || req.deleted)
+        return bot.answerCallbackQuery(query.id, { text: 'درخواست معتبر نیست یا قبلا تایید/حذف شده.', show_alert: true });
+      await update(squadReqRef(reqId), { approved: true });
+      await bot.sendMessage(req.user_id, `✅ درخواست شما برای اسکواد «${req.squad_name}» توسط ادمین تایید شد!\n🟢 اکنون درخواست شما برای دیگران نمایش داده خواهد شد.`);
+      await bot.answerCallbackQuery(query.id, { text: 'تایید شد و اطلاع‌رسانی گردید.' });
+      return;
+    }
+    if (data.startsWith('delete_squadreq_')) {
+      const reqId = data.replace('delete_squadreq_', '');
+      const req = await getSquadReq(reqId);
+      if (!req || req.deleted)
+        return bot.answerCallbackQuery(query.id, { text: 'درخواست پیدا نشد یا قبلا حذف شده.', show_alert: true });
+      await update(squadReqRef(reqId), { deleted: true });
+      await updatePoints(req.user_id, 5);
+      await bot.sendMessage(req.user_id, `درخواست اسکواد شما توسط مدیریت حذف شد و ۵ سکه به حساب شما بازگردانده شد.`);
+      await bot.answerCallbackQuery(query.id, { text: 'درخواست حذف شد و امتیاز بازگردانده شد.' });
+      return;
+    }
+    if (data === 'admin_delete_approved_squads') {
+      const approvedReqs = await getAllSquadReqs({ approved: true });
+      if (!approvedReqs.length) {
+        await bot.answerCallbackQuery(query.id);
+        return bot.sendMessage(userId, 'اسکواد تاییدشده‌ای برای حذف وجود ندارد.');
+      }
+      showAdminApprovedSquadCard(userId, approvedReqs, 0);
+      await bot.answerCallbackQuery(query.id);
+      return;
+    }
+    if (data.startsWith('admin_approved_squad_card_')) {
+      const idx = parseInt(data.replace('admin_approved_squad_card_', ''));
+      const approvedReqs = await getAllSquadReqs({ approved: true });
+      showAdminApprovedSquadCard(userId, approvedReqs, idx);
+      await bot.answerCallbackQuery(query.id);
+      return;
+    }
+    if (data.startsWith('admin_delete_approved_squadreq_')) {
+      const reqId = data.replace('admin_delete_approved_squadreq_', '');
+      const req = await getSquadReq(reqId);
+      if (!req || req.deleted)
+        return bot.answerCallbackQuery(query.id, { text: 'اسکواد پیدا نشد یا قبلا حذف شده.', show_alert: true });
+      await update(squadReqRef(reqId), { deleted: true });
+      await bot.sendMessage(req.user_id, `اسکواد شما توسط مدیریت حذف شد.`);
+      await bot.answerCallbackQuery(query.id, { text: 'اسکواد حذف شد.' });
+      return;
+    }
+  }
+
+  // ---- شرط خاموش بودن ربات فقط برای کاربران عادی ----
   if (!botActive && userId !== adminId) {
     await bot.answerCallbackQuery(query.id, { text: 'ربات موقتاً خاموش است.', show_alert: true });
     return;
   }
-  
-  if (data.startsWith('delete_squadreq_') && userId === adminId) {
-    const reqId = data.replace('delete_squadreq_', '');
-    const req = await getSquadReq(reqId);
-    if (!req || req.deleted)
-      return bot.answerCallbackQuery(query.id, { text: 'درخواست پیدا نشد یا قبلا حذف شده.', show_alert: true });
-    await update(squadReqRef(reqId), { deleted: true });
-    await updatePoints(req.user_id, 5);
-    await bot.sendMessage(req.user_id, `درخواست اسکواد شما توسط مدیریت حذف شد و ۵ سکه به حساب شما بازگردانده شد.`);
-    await bot.answerCallbackQuery(query.id, { text: 'درخواست حذف شد و امتیاز بازگردانده شد.' });
-    return;
-  }
-  
+
   // ---- Anti-Spam ----
   if (userId !== adminId) {
     if (isMuted(userId)) {
@@ -330,10 +398,11 @@ bot.on('callback_query', async (query) => {
   // ---- Main menu back ----
   if (data === 'main_menu') {
     await bot.answerCallbackQuery(query.id);
-    sendMainMenu(userId, messageId);
+    sendMainMenu(userId, query.message?.message_id);
     return;
   }
 
+  // ---- اطلاعات کاربر ----
   const user = await getUser(userId);
   if (!user) return await bot.answerCallbackQuery(query.id, { text: 'خطا در دریافت اطلاعات کاربر.', show_alert: true });
   if (user?.banned) return await bot.answerCallbackQuery(query.id, { text: 'شما بن شده‌اید و اجازه استفاده ندارید.', show_alert: true });
@@ -409,10 +478,10 @@ bot.on('callback_query', async (query) => {
   if (data === 'view_squads') {
     const approvedReqs = await getAllSquadReqs({ approved: true });
     if (approvedReqs.length == 0) {
-      if (messageId) {
+      if (query.message?.message_id) {
         await bot.editMessageText('هیچ اسکواد فعالی وجود ندارد.', {
           chat_id: userId,
-          message_id: messageId,
+          message_id: query.message.message_id,
           reply_markup: {
             inline_keyboard: [
               [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
@@ -431,16 +500,16 @@ bot.on('callback_query', async (query) => {
       await bot.answerCallbackQuery(query.id);
       return;
     }
-    showSquadCard(userId, approvedReqs, 0, messageId);
+    showSquadCard(userId, approvedReqs, 0, query.message?.message_id);
     await bot.answerCallbackQuery(query.id);
     return;
   }
-  
-    // ---- نمایش کارت اسکواد با ورق‌زنی (عمومی) ----
+
+  // ---- نمایش کارت اسکواد با ورق‌زنی (عمومی) ----
   if (data.startsWith('squad_card_')) {
     const idx = parseInt(data.replace('squad_card_', ''));
     const reqs = await getAllSquadReqs({ approved: true });
-    showSquadCard(userId, reqs, idx, messageId);
+    showSquadCard(userId, reqs, idx, query.message?.message_id);
     await bot.answerCallbackQuery(query.id);
     return;
   }
@@ -467,44 +536,32 @@ bot.on('callback_query', async (query) => {
       approved: false,
       deleted: false
     });
-    
 
-  if (!botActive && userId !== adminId) {
-    return bot.sendMessage(userId, 'ربات موقتاً خاموش است.');
-  }
-  
-  
-  // ... ادامه
-  if (data === 'deactivate_bot' && userId === adminId) {
-  botActive = false;
-  await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی خاموش شد.' });
-  return;
-}
-if (data === 'activate_bot' && userId === adminId) {
-  botActive = true;
-  await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی روشن شد.' });
-  return;
-}
-  // ... ادامه سوییچ
-
-  // ---- مدیریت اسکواد: تایید نشده (ادمین) ----
-  if (data === 'admin_squad_list' && userId === adminId) {
-    const pendingReqs = await getAllSquadReqs({ approved: false });
-    if (!pendingReqs.length) {
-      await bot.answerCallbackQuery(query.id);
-      return bot.sendMessage(userId, 'درخواستی برای بررسی وجود ندارد.');
+    if (!botActive && userId !== adminId) {
+      return bot.sendMessage(userId, 'ربات موقتاً خاموش است.');
     }
-    showAdminSquadCard(userId, pendingReqs, 0);
-    await bot.answerCallbackQuery(query.id);
+
+    await updatePoints(userId, -5);
+    userState[userId] = null;
+    await bot.answerCallbackQuery(query.id, { text: 'درخواست ثبت شد.' });
+    bot.sendMessage(userId, '✅ درخواست شما با موفقیت ثبت شد و به صف بررسی مدیریت اضافه شد.');
+    bot.sendMessage(adminId,
+      `درخواست جدید اسکواد:\n\nاسکواد: ${state.squad_name}\nکاربر: ${userId}\nآیدی بازی: ${state.game_id}\nرنک: ${state.min_rank}\nنقش: ${state.roles_needed}\nتوضیحات: ${state.details}\n\n`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: 'تایید ✅', callback_data: `approve_squadreq_${reqId}` },
+              { text: 'حذف ❌', callback_data: `delete_squadreq_${reqId}` }
+            ]
+          ]
+        }
+      }
+    );
     return;
   }
-  if (data.startsWith('admin_squad_card_') && userId === adminId) {
-    const idx = parseInt(data.replace('admin_squad_card_', ''));
-    const pendingReqs = await getAllSquadReqs({ approved: false });
-    showAdminSquadCard(userId, pendingReqs, idx);
-    await bot.answerCallbackQuery(query.id);
-    return;
-  }
+
+  // ... سایر دکمه‌ها و سوییچ‌های خودت
 
   // ---- مدیریت اسکواد: حذف اسکواد تایید شده (ادمین) ----
   if (data === 'admin_delete_approved_squads' && userId === adminId) {
