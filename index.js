@@ -322,8 +322,7 @@ bot.on('callback_query', async (query) => {
   const currentMarkup = query.message.reply_markup || null;
 
   // فرض بر این که می‌خواهی منوی اصلی را نمایش بدهی
-  
-/ فقط ادمین اجازه تغییر وضعیت ربات را دارد
+
   if (userId !== adminId) {
     return bot.answerCallbackQuery(query.id, { text: 'شما دسترسی ندارید.', show_alert: true });
   }
