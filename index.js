@@ -365,6 +365,7 @@ bot.on('callback_query', async (query) => {
     sendMainMenu(userId, messageId);
     return;
   }
+});
   
   const user = await getUser(userId);
   if (!user) return await bot.answerCallbackQuery(query.id, { text: 'خطا در دریافت اطلاعات کاربر.', show_alert: true });
