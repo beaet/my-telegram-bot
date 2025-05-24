@@ -226,21 +226,31 @@ const dynButtonRow = dynButtons.map(btn => ({
 
 reply_markup.inline_keyboard.push(dynButtonRow);
 
-function sendMainMenu(userId, messageId = null, currentText = null, currentMarkup = null) {
+async function sendMainMenu(userId, messageId = null, currentText = null, currentMarkup = null) {
   const text = 'سلام، به ربات محاسبه‌گر Mobile Legends خوش آمدید ✨';
   const { reply_markup } = mainMenuKeyboard();
 
+  const dynButtonsSnap = await get(ref(db, 'dynamic_buttons'));
+  const dynButtons = dynButtonsSnap.exists() ? Object.values(dynButtonsSnap.val()) : [];
+
+  if (dynButtons.length > 0) {
+    const dynButtonRow = dynButtons.map(btn => ({
+      text: btn.text,
+      callback_data: `dynbtn_${btn.id}`
+    }));
+    reply_markup.inline_keyboard.push(dynButtonRow);
+  }
+
   if (messageId) {
-    // فقط اگر متن یا مارکاپ تغییر کرده باشد ویرایش کن
     if (text !== currentText || JSON.stringify(reply_markup) !== JSON.stringify(currentMarkup)) {
-      bot.editMessageText(text, {
+      await bot.editMessageText(text, {
         chat_id: userId,
         message_id: messageId,
         reply_markup
       });
     }
   } else {
-    bot.sendMessage(userId, text, { reply_markup });
+    await bot.sendMessage(userId, text, { reply_markup });
   }
 }
 
