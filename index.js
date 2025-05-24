@@ -172,39 +172,41 @@ function mainMenuKeyboard() {
   return {
     reply_markup: {
       inline_keyboard: [
-        [
-{ text: '🧩 تورنومنت', callback_data: 'tournament' },
-    { text: '📊محاسبه ریت', callback_data: 'calculate_rate' },
-    { text: '🏆محاسبه برد و باخت', callback_data: 'calculate_wl' },
-    { text: '⚔ هیرو کانتر', callback_data: 'hero_counter' }
-  ],
-  [
-    { text: '🔥 چالش', callback_data: 'challenge' }
-        ],
-        [
-          { text: '📜 لیست پیک/بن', callback_data: 'pickban_list' }
-        ],
-        [
-          { text: '🔗دعوت دوستان', callback_data: 'referral' },
-          { text: '👤 پروفایل', callback_data: 'profile' }
-        ],
-        [
-          { text: '➕ ثبت درخواست اسکواد', callback_data: 'squad_request' },
-          { text: '👥 مشاهده اسکوادها', callback_data: 'view_squads' }
-        ],
-        [
-          { text: '💬پشتیبانی', callback_data: 'support' }
-        ],
-        [
-          { text: '📚راهنما', callback_data: 'help' }
-        ],
-        [
-           { text: '💰خرید امتیاز', callback_data: 'buy' }
-        ],
-        [
-          { text: '🍀 شانس', callback_data: 'chance' },
-          { text: '🎁 کد هدیه', callback_data: 'gift_code' }
-        ]
+    [
+      { text: '📊محاسبه ریت', callback_data: 'calculate_rate' },
+      { text: '🏆محاسبه برد و باخت', callback_data: 'calculate_wl' }
+    ],
+    [
+      { text: '⚔ هیرو کانتر', callback_data: 'hero_counter' },
+      { text: '🧩 تورنومنت', callback_data: 'tournament' }
+    ],
+    [
+      { text: '📜 لیست پیک/بن', callback_data: 'pickban_list' }
+    ],
+    [
+      { text: '🔥 چالش', callback_data: 'challenge' }
+    ],
+    [
+      { text: '🔗دعوت دوستان', callback_data: 'referral' },
+      { text: '👤 پروفایل', callback_data: 'profile' }
+    ],
+    [
+      { text: '➕ ثبت درخواست اسکواد', callback_data: 'squad_request' },
+      { text: '👥 مشاهده اسکوادها', callback_data: 'view_squads' }
+    ],
+    [
+      { text: '💬پشتیبانی', callback_data: 'support' }
+    ],
+    [
+      { text: '📚راهنما', callback_data: 'help' }
+    ],
+    [
+      { text: '💰خرید امتیاز', callback_data: 'buy' }
+    ],
+    [
+      { text: '🍀 شانس', callback_data: 'chance' },
+      { text: '🎁 کد هدیه', callback_data: 'gift_code' }
+    ]
       ]
     }
   };
