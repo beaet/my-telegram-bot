@@ -194,11 +194,23 @@ function mainMenuKeyboard() {
 function sendMainMenu(userId, messageId = null) {
   const text = 'سلام، به ربات محاسبه‌گر Mobile Legends خوش آمدید ✨';
   if (messageId) {
-    bot.editMessageText(text, {
-      chat_id: userId,
-      message_id: messageId,
-      ...mainMenuKeyboard()
-    });
+    try {
+      bot.editMessageText(text, {
+        chat_id: userId,
+        message_id: messageId,
+        ...mainMenuKeyboard()
+      });
+    } catch (e) {
+      if (
+        e.response &&
+        e.response.body &&
+        e.response.body.description === 'Bad Request: message is not modified'
+      ) {
+        // نادیده گرفتن خطای مشابه بودن پیام
+      } else {
+        console.error('خطا در editMessageText:', e);
+      }
+    }
   } else {
     bot.sendMessage(userId, text, mainMenuKeyboard());
   }
@@ -404,32 +416,33 @@ bot.on('callback_query', async (query) => {
   if (data === 'view_squads') {
     const approvedReqs = await getAllSquadReqs({ approved: true });
     if (approvedReqs.length == 0) {
-      if (messageId) {
-        await bot.editMessageText('هیچ اسکواد فعالی وجود ندارد.', {
-          chat_id: userId,
-          message_id: messageId,
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
-            ]
-          }
-        });
-      } else {
-        await bot.sendMessage(userId, 'هیچ اسکواد فعالی وجود ندارد.', {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
-            ]
-          }
-        });
+if (messageId) {
+  try {
+    await bot.editMessageText('هیچ اسکواد فعالی وجود ندارد.', {
+      chat_id: userId,
+      message_id: messageId,
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
+        ]
       }
-      await bot.answerCallbackQuery(query.id);
-      return;
+    });
+  } catch (e) {
+    if (
+      e.response?.body?.description !== 'Bad Request: message is not modified'
+    ) {
+      console.error('خطا در editMessageText:', e);
     }
-    showSquadCard(userId, approvedReqs, 0, messageId);
-    await bot.answerCallbackQuery(query.id);
-    return;
   }
+} else {
+  await bot.sendMessage(userId, 'هیچ اسکواد فعالی وجود ندارد.', {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
+      ]
+    }
+  });
+}
 
   // ---- مدیریت اسکواد: تایید نشده (ادمین) ----
   if (data === 'admin_squad_list' && userId === adminId) {
@@ -968,21 +981,28 @@ let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: $
     buttons = [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }];
   }
 
-  if (messageId) {
-    bot.editMessageText(txt, {
+if (messageId) {
+  try {
+    await bot.editMessageText(txt, {
       chat_id: userId,
       message_id: messageId,
       reply_markup: {
         inline_keyboard: [buttons]
       }
     });
-  } else {
-    bot.sendMessage(userId, txt, {
-      reply_markup: {
-        inline_keyboard: [buttons]
-      }
-    });
+  } catch (e) {
+    if (
+      e.response?.body?.description !== 'Bad Request: message is not modified'
+    ) {
+      console.error('خطا در editMessageText:', e);
+    }
   }
+} else {
+  await bot.sendMessage(userId, txt, {
+    reply_markup: {
+      inline_keyboard: [buttons]
+    }
+  });
 }
 
 // ---- نمایش کارت اسکواد ادمین با ورق‌زنی و دکمه تایید/حذف ----
