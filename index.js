@@ -10,7 +10,6 @@ const token = process.env.BOT_TOKEN;
 const adminId = Number(process.env.ADMIN_ID);
 const webhookUrl = process.env.WEBHOOK_URL;
 const port = process.env.PORT || 10000;
-let botActive = true
 
 // ---- Firebase Config ----
 const firebaseConfig = {
@@ -66,6 +65,17 @@ async function getAllUsersFromDatabase() {
       else resolve(rows);
     });
   });
+}
+
+const db = admin.database();
+
+async function setBotActive(status) {
+  await db.ref('settings/botActive').set(status);
+}
+
+async function getBotActive() {
+  const snapshot = await db.ref('settings/botActive').once('value');
+  return snapshot.exists() ? snapshot.val() : true; // پیش‌فرض: روشن
 }
 
 // ---- Gift Code helpers ----
@@ -223,6 +233,12 @@ function sendMainMenu(userId, messageId = null, currentText = null, currentMarku
 bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
   const userId = msg.from.id;
   const refId = match[1] ? parseInt(match[1]) : null;
+  
+  let botActive = true;
+
+(async () => {
+  botActive = await getBotActive();
+})();
 
   await ensureUser(msg.from);
   const user = await getUser(userId);
@@ -308,23 +324,29 @@ bot.on('callback_query', async (query) => {
 
   // فرض بر این که می‌خواهی منوی اصلی را نمایش بدهی
   
-    if (data === 'deactivate_bot' && userId === adminId) {
-    botActive = false;
-    await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی خاموش شد.' });
-    // ... پنل را آپدیت کن
-    return;
-  }
-  if (data === 'activate_bot' && userId === adminId) {
-    botActive = true;
-    await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی روشن شد.' });
-    // ... پنل را آپدیت کن
-    return;
-  }
+if (data === 'deactivate_bot' && userId === adminId) {
+  botActive = false;
+  await setBotActive(false);
+  await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی خاموش شد.' });
+  // (اختیاری) پنل مدیریت را بروزرسانی کن
+  return;
+}
+
+if (data === 'activate_bot' && userId === adminId) {
+  botActive = true;
+  await setBotActive(true);
+  await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی روشن شد.' });
+  // (اختیاری) پنل مدیریت را بروزرسانی کن
+  return;
+}
   
-    if (!botActive && userId !== adminId) {
-    await bot.answerCallbackQuery(query.id, { text: 'ربات موقتاً خاموش است.', show_alert: true });
-    return;
-  }
+if (!botActive && userId !== adminId) {
+  await bot.answerCallbackQuery(query.id, {
+    text: 'ربات موقتاً غیرفعال است.',
+    show_alert: true
+  });
+  return;
+}
 
   // ---- Anti-Spam ----
   if (userId !== adminId) {
