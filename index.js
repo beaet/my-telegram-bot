@@ -408,7 +408,7 @@ if (data === 'activate_bot' && userId === adminId) {
     );
   }
   
-if (data === 'create_button' && userId === adminId) {
+if (data === 'create_dynamic_button' && userId === adminId) {
   const snapshot = await get(ref(db, 'dynamic_buttons'));
   const buttons = snapshot.exists() ? snapshot.val() : {};
   const buttonList = Object.keys(buttons);
