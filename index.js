@@ -245,9 +245,10 @@ bot.on('message', async (msg) => {
   const text = msg.text || '';
   if (!botActive && userId !== adminId) return;
 
-  // دیباگ state (اختیاری ولی مفید برای تست)
-  console.log('User message:', userId, text, userState[userId]);
+  const state = userState[userId];
+  if (!state || !state.step) return; // اگر کاربر در فرآیند خاصی نیست، رد شو
 
+  console.log('User message:', userId, text, state);
 });
 
 // ---- Panel for admin ----
