@@ -3,7 +3,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const { initializeApp } = require('firebase/app');
 const { getDatabase, ref, set, get, update, remove, push } = require('firebase/database');
-
+const axios = require('axios');
 const app = express();
 
 const token = process.env.BOT_TOKEN;
@@ -18,7 +18,7 @@ const firebaseConfig = {
 };
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getDatabase(firebaseApp);
-const userState = {};
+
 // ---- User Helper Functions ----
 const userRef = userId => ref(db, `users/${userId}`);
 async function ensureUser(user) {
@@ -39,6 +39,16 @@ async function getUser(userId) {
   const snap = await get(userRef(userId));
   return snap.exists() ? snap.val() : null;
 }
+const userStates = new Map();
+const userTemp = new Map();
+
+function setUserState(userId, state) { userStates.set(userId, state); }
+function getUserState(userId) { return userStates.get(userId); }
+function clearUserState(userId) { userStates.delete(userId); }
+
+function setUserTemp(userId, data) { userTemp.set(userId, data); }
+function getUserTemp(userId) { return userTemp.get(userId) || {}; }
+function clearUserTemp(userId) { userTemp.delete(userId); }
 async function updatePoints(userId, amount) {
   const user = await getUser(userId);
   if (user) await update(userRef(userId), { points: (user.points || 0) + amount });
@@ -96,34 +106,6 @@ async function addUserToGlobalGiftCode(code, userId) {
   await update(globalGiftCodeRef(code), { users_used });
   return true;
 }
-
-const userStates = new Map();
-const userTemp = new Map();
-
-async function setUserState(userId, state) {
-  userStates.set(userId, state);
-}
-
-async function getUserState(userId) {
-  return userStates.get(userId);
-}
-
-async function clearUserState(userId) {
-  userStates.delete(userId);
-}
-
-async function setUserTemp(userId, data) {
-  userTemp.set(userId, data);
-}
-
-async function getUserTemp(userId) {
-  return userTemp.get(userId) || {};
-}
-
-async function clearUserTemp(userId) {
-  userTemp.delete(userId);
-}
-
 async function deleteGlobalGiftCode(code) {
   await remove(globalGiftCodeRef(code));
 }
@@ -179,6 +161,7 @@ function isMuted(userId) {
 }
 
 // ---- User State ----
+const userState = {};
 const supportChatMap = {};
 
 // ---- Bot Init ----
@@ -222,7 +205,7 @@ function mainMenuKeyboard() {
       { text: '👥 مشاهده اسکوادها', callback_data: 'view_squads' }
     ],
     [
-          { text: 'اطلاعات بازیکن🪞', callback_data: 'get_mlbb_profile' }
+              { text: 'اطلاعات بازیکن🪞', callback_data: 'get_mlbb_profile' }
     ],
     [
       { text: '💬پشتیبانی', callback_data: 'support' }
@@ -401,12 +384,6 @@ if (data === 'activate_bot' && userId === adminId) {
     }
   }
   
-  if (data === 'get_mlbb_profile') {
-  await setUserState(userId, 'awaiting_uid');
-  await bot.sendMessage(userId, 'لطفاً آیدی بازی (UID) خود را وارد کنید:\n\nمثال: 123456789');
-  return;
-}
-  
   if (data === 'tournament') {
   await bot.answerCallbackQuery(query.id);
   await bot.sendMessage(userId, 'فعلاً هیچ تورنمنتی در دسترس نیست.\nجزییات بیشتری بزودی اعلام خواهد شد.');
@@ -447,6 +424,21 @@ if (data === 'challenge') {
       }
     );
   }
+  
+  bot.on('callback_query', async (query) => {
+  const userId = query.from.id;
+  const data = query.data;
+
+  // ... سایر کدها ...
+
+  if (data === 'get_mlbb_profile') {
+    setUserState(userId, 'awaiting_mlbb_uid');
+    await bot.answerCallbackQuery(query.id);
+    await bot.sendMessage(userId, 'لطفاً آیدی بازی (UID) خود را وارد کنید:\n\nمثال: 123456789');
+    return;
+  }
+
+  // ... سایر کدها ...
 
   // ---- بخش شانس ----
   if (data === 'chance') {
@@ -809,6 +801,52 @@ if (!botActive && msg.from.id !== adminId) {
     return bot.sendMessage(msg.from.id, "ربات موقتاً خاموش است.");
   }
   
+  bot.on('message', async (msg) => {
+  const userId = msg.from.id;
+  const text = msg.text ? msg.text.trim() : '';
+  const state = getUserState(userId);
+
+  // ... سایر کدها ...
+
+  // مرحله ۱: دریافت UID
+  if (state === 'awaiting_mlbb_uid') {
+    if (!/^\d{6,}$/.test(text)) {
+      return bot.sendMessage(userId, 'آیدی بازی نامعتبر است. لطفاً فقط عدد UID را وارد کنید.');
+    }
+    setUserTemp(userId, { uid: text });
+    setUserState(userId, 'awaiting_mlbb_server');
+    return bot.sendMessage(userId, 'شماره سرور خود را وارد کنید:\n\nمثال: 1234');
+  }
+
+  // مرحله ۲: دریافت شماره سرور و نمایش پروفایل
+  if (state === 'awaiting_mlbb_server') {
+    if (!/^\d+$/.test(text)) {
+      return bot.sendMessage(userId, 'شماره سرور نامعتبر است. لطفاً فقط اعداد را وارد کنید.');
+    }
+    const { uid } = getUserTemp(userId);
+    clearUserState(userId);
+    clearUserTemp(userId);
+
+    // تماس با API و نمایش نتیجه
+    try {
+      const res = await axios.get('https://mlbb-x.vercel.app/api/profile', {
+        params: { uid, server: text }
+      });
+
+      if (!res.data || res.data.status !== 'success') {
+        return bot.sendMessage(userId, 'پروفایلی با این اطلاعات یافت نشد.');
+      }
+      const p = res.data.data;
+      const msgTxt = `🏷️ نام: ${p.name}\n🆔 آیدی: ${p.user_id} (${p.server_id})\n🏆 رنک: ${p.rank}\n📊 وین‌ریت: ${p.win_rate}\n🎮 تعداد بازی‌ها: ${p.matches}`;
+      await bot.sendPhoto(userId, p.avatar, { caption: msgTxt });
+    } catch (e) {
+      await bot.sendMessage(userId, 'خطا در دریافت اطلاعات. لطفاً بعداً دوباره تلاش کنید.');
+    }
+    return;
+  }
+
+  // ... سایر کدها
+  
   if (user?.banned) {
     return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده ندارید.');
   }
@@ -1011,41 +1049,6 @@ if (!botActive && msg.from.id !== adminId) {
     userState[userId] = null;
     return bot.sendMessage(userId, 'کد نامعتبر است یا منقضی شده است.');
   }
-  
-  const userState = await getUserState(userId);
-if (state === 'awaiting_uid') {
-  const uid = message.text.trim();
-  await setUserTemp(userId, { uid }); // ذخیره موقتی UID
-  await setUserState(userId, 'awaiting_server');
-  await bot.sendMessage(userId, 'اکنون شماره سرور خود را وارد کنید:\n\nمثال: 1234');
-  return;
-}
-
-if (state === 'awaiting_server') {
-  const server = message.text.trim();
-  const { uid } = await getUserTemp(userId);
-  await clearUserState(userId);
-  await clearUserTemp(userId);
-
-  // تماس با API
-  try {
-    const res = await axios.get(`https://mlbb-x.vercel.app/api/profile`, {
-      params: { uid, server }
-    });
-
-    if (res.data.status !== 'success') {
-      return bot.sendMessage(userId, 'پروفایلی با این اطلاعات یافت نشد.');
-    }
-
-    const p = res.data.data;
-    const msg = `🏷️ نام: ${p.name}\n🆔 آیدی: ${p.user_id} (${p.server_id})\n🏆 رنک: ${p.rank}\n📊 وین‌ریت: ${p.win_rate}\n🎮 تعداد بازی‌ها: ${p.matches}`;
-    await bot.sendPhoto(userId, p.avatar, { caption: msg });
-  } catch (e) {
-    await bot.sendMessage(userId, 'خطا در دریافت اطلاعات. لطفاً بعداً تلاش کنید.');
-  }
-
-  return;
-}
 
   // ---- اداره مراحل ثبت اسکواد ----
   if (state.step === 'squad_name') {
