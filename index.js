@@ -67,8 +67,6 @@ async function getAllUsersFromDatabase() {
   });
 }
 
-const db = admin.database();
-
 async function setBotActive(status) {
   await db.ref('settings/botActive').set(status);
 }
