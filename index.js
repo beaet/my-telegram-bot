@@ -475,35 +475,35 @@ bot.on('callback_query', async (query) => {
     await bot.answerCallbackQuery(query.id);
     return bot.sendMessage(userId, 'نام اسکواد خود را وارد کنید:');
   }
-  if (data === 'view_squads') {
-    const approvedReqs = await getAllSquadReqs({ approved: true });
-    if (approvedReqs.length == 0) {
-      if (query.message?.message_id) {
-        await bot.editMessageText('هیچ اسکواد فعالی وجود ندارد.', {
-          chat_id: userId,
-          message_id: query.message.message_id,
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
-            ]
-          }
-        });
-      } else {
-        await bot.sendMessage(userId, 'هیچ اسکواد فعالی وجود ندارد.', {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
-            ]
-          }
-        });
-      }
-      await bot.answerCallbackQuery(query.id);
-      return;
+if (data === 'view_squads') {
+  const approvedReqs = await getAllSquadReqs({ approved: true });
+  if (approvedReqs.length == 0) {
+    if (query.message?.message_id) {
+      await bot.editMessageText('هیچ اسکواد فعالی وجود ندارد.', {
+        chat_id: userId,
+        message_id: query.message.message_id,
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
+          ]
+        }
+      });
+    } else {
+      await bot.sendMessage(userId, 'هیچ اسکواد فعالی وجود ندارد.', {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: 'بازگشت 🔙', callback_data: 'main_menu' }]
+          ]
+        }
+      });
     }
-    showSquadCard(userId, approvedReqs, 0, query.message?.message_id);
     await bot.answerCallbackQuery(query.id);
     return;
   }
+  showSquadCard(userId, approvedReqs, 0, query.message?.message_id);
+  await bot.answerCallbackQuery(query.id);
+  return;
+}
 
   // ---- نمایش کارت اسکواد با ورق‌زنی (عمومی) ----
   if (data.startsWith('squad_card_')) {
