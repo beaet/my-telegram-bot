@@ -3,23 +3,14 @@ const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const { initializeApp } = require('firebase/app');
 const { getDatabase, ref, set, get, update, remove, push } = require('firebase/database');
-
+const { showDynamicButtonsPanel, handleDynamicButtonsCallback, handleDynamicButtonsMessage } = require('./dynamic_buttons_manager');
 const app = express();
 
 const token = process.env.BOT_TOKEN;
 const adminId = Number(process.env.ADMIN_ID);
 const webhookUrl = process.env.WEBHOOK_URL;
 const port = process.env.PORT || 10000;
-let botActive = true;
-
-// تعریف bot قبل از استفاده
-const bot = new TelegramBot(token, { polling: false });
-bot.setWebHook(`${webhookUrl}/bot${token}`);
-app.use(express.json());
-app.post(`/bot${token}`, (req, res) => {
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
-});
+let botActive = true
 
 // ---- Firebase Config ----
 const firebaseConfig = {
@@ -65,6 +56,16 @@ async function getHelpText() {
 }
 async function setHelpText(newText) {
   await set(settingsRef('help_text'), newText);
+}
+
+async function getAllUsersFromDatabase() {
+  // مثلا نمونه برای SQLite:
+  return new Promise((resolve, reject) => {
+    db.all('SELECT id, name, points FROM users', [], (err, rows) => {
+      if (err) reject(err);
+      else resolve(rows);
+    });
+  });
 }
 
 // ---- Gift Code helpers ----
@@ -127,6 +128,7 @@ async function getAllSquadReqs(filter = {}) {
   const snap = await get(squadReqsRef);
   if (!snap.exists()) return [];
   let reqs = Object.entries(snap.val()).map(([id, v]) => ({ id, ...v }));
+  // فیلتر بر اساس وضعیت تایید و حذف نشده بودن
   if (filter.approved !== undefined)
     reqs = reqs.filter(r => !!r.approved === !!filter.approved);
   if (filter.user_id !== undefined)
@@ -137,8 +139,8 @@ async function getAllSquadReqs(filter = {}) {
 }
 
 // ---- Anti-Spam ----
-const buttonSpamMap = {};
-const muteMap = {};
+const buttonSpamMap = {}; // { userId: [timestamps] }
+const muteMap = {}; // { userId: muteUntilTimestamp }
 function isMuted(userId) {
   if (!muteMap[userId]) return false;
   if (Date.now() > muteMap[userId]) {
@@ -152,95 +154,94 @@ function isMuted(userId) {
 const userState = {};
 const supportChatMap = {};
 
-// ---- Bot Active State with Firebase ----
-async function setBotActiveStatus(isActive) {
-  await set(ref(db, 'settings/bot_active'), isActive ? 1 : 0);
-  botActive = !!isActive;
-}
-async function fetchBotActiveStatus() {
-  const snap = await get(ref(db, 'settings/bot_active'));
-  if (snap.exists()) {
-    botActive = !!snap.val();
-  } else {
-    botActive = true;
-  }
-}
+// ---- Bot Init ----
+(async () => {
+  await fetchBotActiveStatus();
+  // اینجا بقیه کدهای bot و express را بنویس
+  // مثلاً:
+  const bot = new TelegramBot(token, { polling: false });
+  bot.setWebHook(`${webhookUrl}/bot${token}`);
 
+  app.use(express.json());
+  app.post(`/bot${token}`, (req, res) => {
+    bot.processUpdate(req.body);
+    res.sendStatus(200);
+  });
 // ---- Main Menu ----
-function mainMenuKeyboard() {
-  return {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          { text: '📊محاسبه ریت', callback_data: 'calculate_rate' },
-          { text: '🏆محاسبه برد و باخت', callback_data: 'calculate_wl' }
-        ],
-        [
-          { text: '📜 لیست پیک/بن', callback_data: 'pickban_list' }
-        ],
-        [
-          { text: '🔗دعوت دوستان', callback_data: 'referral' },
-          { text: '👤 پروفایل', callback_data: 'profile' }
-        ],
-        [
-          { text: '➕ ثبت درخواست اسکواد', callback_data: 'squad_request' },
-          { text: '👥 مشاهده اسکوادها', callback_data: 'view_squads' }
-        ],
-        [
-          { text: '💬پشتیبانی', callback_data: 'support' }
-        ],
-        [
-          { text: '📚راهنما', callback_data: 'help' }
-        ],
-        [
-           { text: '💰خرید امتیاز', callback_data: 'buy' }
-        ],
-        [
-          { text: '🍀 شانس', callback_data: 'chance' },
-          { text: '🎁 کد هدیه', callback_data: 'gift_code' }
-        ]
-      ]
-    }
-  };
+async function mainMenuKeyboard() {
+  let inline_keyboard = [
+    [
+      { text: '📊محاسبه ریت', callback_data: 'calculate_rate' },
+      { text: '🏆محاسبه برد و باخت', callback_data: 'calculate_wl' }
+    ],
+    [
+      { text: '📜 لیست پیک/بن', callback_data: 'pickban_list' }
+    ],
+    [
+      { text: '🔗دعوت دوستان', callback_data: 'referral' },
+      { text: '👤 پروفایل', callback_data: 'profile' }
+    ],
+    [
+      { text: '➕ ثبت درخواست اسکواد', callback_data: 'squad_request' },
+      { text: '👥 مشاهده اسکوادها', callback_data: 'view_squads' }
+    ],
+    [
+      { text: '💬پشتیبانی', callback_data: 'support' }
+    ],
+    [
+      { text: '📚راهنما', callback_data: 'help' }
+    ],
+    [
+      { text: '💰خرید امتیاز', callback_data: 'buy' }
+    ],
+    [
+      { text: '🍀 شانس', callback_data: 'chance' },
+      { text: '🎁 کد هدیه', callback_data: 'gift_code' }
+    ]
+  ];
+
+  // دکمه‌های پویا
+  const snapshot = await get(ref(db, 'dynamic_buttons'));
+  let buttons = snapshot.exists() ? snapshot.val() : [];
+  if (!Array.isArray(buttons)) buttons = [];
+  buttons.forEach(row => {
+    inline_keyboard.push(
+      row.map(btn => ({
+        text: btn.text,
+        callback_data: `dynbtn_user_${btn.id}`
+      }))
+    );
+  });
+
+  return { reply_markup: { inline_keyboard } };
 }
 
 async function sendMainMenu(userId, messageId = null, currentText = null, currentMarkup = null) {
   const text = 'سلام، به ربات محاسبه‌گر Mobile Legends خوش آمدید ✨';
-  const { reply_markup } = mainMenuKeyboard();
-
-  // گرفتن دکمه‌های پویا از Firebase
-  const dynButtonsSnap = await get(ref(db, 'dynamic_buttons'));
-  const dynButtons = dynButtonsSnap.exists() ? Object.values(dynButtonsSnap.val()) : [];
-  if (dynButtons.length > 0) {
-    const dynButtonRow = dynButtons.map(btn => ({
-      text: btn.text,
-      callback_data: `dynbtn_${btn.id}`
-    }));
-    reply_markup.inline_keyboard.push(dynButtonRow);
-  }
-
+  const { reply_markup } = await mainMenuKeyboard();
   if (messageId) {
     if (text !== currentText || JSON.stringify(reply_markup) !== JSON.stringify(currentMarkup)) {
-      await bot.editMessageText(text, {
+      bot.editMessageText(text, {
         chat_id: userId,
         message_id: messageId,
         reply_markup
       });
     }
   } else {
-    await bot.sendMessage(userId, text, { reply_markup });
+    bot.sendMessage(userId, text, { reply_markup });
   }
 }
 
 // ---- /start with referral ----
 bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
-	const userId = msg.from.id;
+  const userId = msg.from.id;
   const refId = match[1] ? parseInt(match[1]) : null;
-  // ... ادامه کد ...
+  
   if (!botActive && msg.from.id !== adminId) {
     return bot.sendMessage(msg.from.id, "ربات موقتاً خاموش است.");
   }
- await ensureUser(msg.from);
+
+  await ensureUser(msg.from);
   const user = await getUser(userId);
   if (user?.banned) {
     return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده از ربات را ندارید.');
@@ -254,8 +255,7 @@ bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
       bot.sendMessage(refId, `🎉 یک نفر با لینک دعوت شما وارد ربات شد و ۵ امتیاز گرفتید!`);
     }
   }
-  userState[userId] = null;
-  sendMainMenu(userId);
+  userState[userId] = null; sendMainMenu(userId);
 });
 
 // ---- Bot Active State with Firebase ----
@@ -275,10 +275,6 @@ async function fetchBotActiveStatus() {
 
 // ---- Panel for admin ----
 bot.onText(/\/panel/, async (msg) => {
-  if (!botActive && msg.from.id !== adminId) {
-    return bot.sendMessage(msg.from.id, "ربات موقتاً خاموش است.");
-  }
-// ---- Panel for admin ----
   const userId = msg.from.id;
   if (userId !== adminId) {
     return bot.sendMessage(userId, 'شما دسترسی به پنل مدیریت ندارید.');
@@ -319,14 +315,14 @@ bot.onText(/\/panel/, async (msg) => {
           { text: '🔍 مدیریت اسکوادها', callback_data: 'admin_squad_list' }
         ],
         [
-                  { text: '➕ ساخت دکمه پویا', callback_data: 'create_dynamic_button' }
-        ],
-        [
           { text: '🟢 روشن کردن ربات', callback_data: 'activate_bot' },
           { text: '🔴 خاموش کردن ربات', callback_data: 'deactivate_bot' }
         ],
         [
           { text: '🗑 حذف اسکواد تاییدشده', callback_data: 'admin_delete_approved_squads' }
+        ],
+        [
+                          { text: '🧩 ساخت دکمه پویا', callback_data: 'dynamic_buttons_panel' }
         ],
         [
           { text: '📋 جزییات کاربران', callback_data: 'user_details' }
@@ -336,15 +332,14 @@ bot.onText(/\/panel/, async (msg) => {
   });
 });
 
-
 // ---- CALLBACK QUERIES ----
 bot.on('callback_query', async (query) => {
   if (!botActive && query.from.id !== adminId) {
     await bot.answerCallbackQuery(query.id, { text: 'ربات موقتاً خاموش است.', show_alert: true });
     return;
   }
-  // ادامه کد ...
-const userId = query.from.id;
+
+  const userId = query.from.id;
   const data = query.data;
   const messageId = query.message && query.message.message_id;
   const currentText = query.message.text;
@@ -360,6 +355,38 @@ if (data === 'deactivate_bot' && userId === adminId) {
 if (data === 'activate_bot' && userId === adminId) {
   await setBotActiveStatus(true);
   await bot.answerCallbackQuery(query.id, { text: 'ربات برای کاربران عادی روشن شد.' });
+  return;
+}
+
+if (data === 'dynamic_buttons_panel' && userId === adminId) {
+  await showDynamicButtonsPanel(bot, db, userId);
+  return;
+}
+if (data.startsWith('dynbtn_user_')) {
+  const btnId = data.replace('dynbtn_user_', '');
+  const snapshot = await get(ref(db, 'dynamic_buttons'));
+  let buttons = snapshot.exists() ? snapshot.val() : [];
+  if (!Array.isArray(buttons)) buttons = [];
+  let found;
+  for (let row of buttons) {
+    for (let btn of row) {
+      if (btn.id && String(btn.id) === btnId) {
+        found = btn;
+        break;
+      }
+    }
+    if (found) break;
+  }
+  if (found) {
+    if (found.responseType === 'alert') {
+      await bot.answerCallbackQuery(query.id, { text: found.responseText, show_alert: true });
+    } else {
+      await bot.answerCallbackQuery(query.id);
+      await bot.sendMessage(userId, found.responseText);
+    }
+  } else {
+    await bot.answerCallbackQuery(query.id, { text: "دکمه پیدا نشد.", show_alert: true });
+  }
   return;
 }
 
@@ -384,7 +411,7 @@ if (data === 'activate_bot' && userId === adminId) {
   // ---- Main menu back ----
   if (data === 'main_menu') {
     await bot.answerCallbackQuery(query.id);
-    sendMainMenu(userId, messageId);
+   await sendMainMenu(userId, messageId);
     return;
   }
 
@@ -407,57 +434,6 @@ if (data === 'activate_bot' && userId === adminId) {
       }
     );
   }
-  
-if (data === 'create_dynamic_button' && userId === adminId) {
-  const snapshot = await get(ref(db, 'dynamic_buttons'));
-  const buttons = snapshot.exists() ? snapshot.val() : {};
-  const buttonList = Object.keys(buttons);
-
-  const rows = buttonList.map((key) => [
-    { text: `➕ کنار "${buttons[key].text}"`, callback_data: `add_near_${key}` }
-  ]);
-
-  rows.push([{ text: '➕ اضافه به آخر', callback_data: 'add_near_end' }]);
-  rows.push([{ text: 'بازگشت 🔙', callback_data: 'panel_back' }]);
-
-  await bot.editMessageText('انتخاب کن دکمه جدید کجا قرار بگیره:', {
-    chat_id: userId,
-    message_id: messageId,
-    reply_markup: { inline_keyboard: rows }
-  });
-  return;
-}
-
-if (data.startsWith('add_near_')) {
-  const positionKey = data.replace('add_near_', '');
-  userState[userId] = { step: 'await_button_text', positionKey };
-  await bot.sendMessage(userId, 'لطفاً متن دکمه جدید را وارد کن:');
-  return;
-}
-
-if (data.startsWith('btn_resp_type_')) {
-  const type = data === 'btn_resp_type_msg' ? 'message' : 'alert';
-  const state = userState[userId];
-  state.step = 'await_button_response_text';
-  state.responseType = type;
-  await bot.sendMessage(userId, 'متن پاسخ دکمه رو بنویس:');
-  return;
-}
-
-if (data.startsWith('dynbtn_')) {
-  const id = data.replace('dynbtn_', '');
-  const snap = await get(ref(db, `dynamic_buttons/${id}`));
-  if (!snap.exists()) return;
-
-  const button = snap.val();
-  if (button.responseType === 'alert') {
-    await bot.answerCallbackQuery(query.id, { text: button.responseText, show_alert: true });
-  } else {
-    await bot.sendMessage(userId, button.responseText);
-  }
-  return;
-}
-
 
   // ---- بخش شانس ----
   if (data === 'chance') {
@@ -504,6 +480,10 @@ if (data.startsWith('dynbtn_')) {
     userState[userId] = null;
     return;
   }
+  
+  if (data.startsWith('dynbtn_user_')) {
+  // دکمه را پیدا کن و بسته به responseType پیام یا alert بفرست
+}
 
   // ---- اسکواد: ثبت درخواست ----
   if (data === 'squad_request') {
@@ -808,110 +788,26 @@ if (data.startsWith('delete_squadreq_') && userId === adminId) {
   }
 });
 
-// ---- Message Handler ----
+// ---- اداره مراحل ثبت اسکواد ----
+// ... ناحیه message handler بدون تغییر، فقط بخش stateهای جدید اضافه شود
 bot.on('message', async (msg) => {
-  if (!botActive && msg.from.id !== adminId) {
-    return bot.sendMessage(msg.from.id, "ربات موقتاً خاموش است.");
-  }
-  
-  // ... ناحیه message handler بدون تغییر، فقط بخش stateهای جدید اضافه شود
   const userId = msg.from.id;
   const text = msg.text || '';
   if (!userState[userId] && userId !== adminId) return;
   const user = await getUser(userId);
   
-  // ادامه کد message handler...
-  if (userState[userId]?.step === 'await_button_text') {
-  const { positionKey } = userState[userId];
-  userState[userId] = { step: 'await_button_response_type', positionKey, buttonText: msg.text };
-  await bot.sendMessage(userId, 'چه نوع پاسخی داشته باشه؟', {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          { text: 'ارسال پیام متنی', callback_data: 'btn_resp_type_msg' },
-          { text: 'اعلان (Alert)', callback_data: 'btn_resp_type_alert' }
-        ]
-      ]
-    }
-  });
-  return;
-}
-  
-  if (userState[userId]?.step === 'await_button_response_text') {
-  const { positionKey, buttonText, responseType } = userState[userId];
-  const responseText = msg.text;
-  const buttonId = Date.now(); // یا uuid
-
-  const newButton = {
-    id: buttonId,
-    text: buttonText,
-    responseType,
-    responseText
-  };
-
-  const snapshot = await get(ref(db, 'dynamic_buttons'));
-  const existingButtons = snapshot.exists() ? snapshot.val() : {};
-
-  let buttonsArray = Object.entries(existingButtons);
-
-  if (positionKey === 'end') {
-    buttonsArray.push([buttonId, newButton]);
-  } else {
-    const index = buttonsArray.findIndex(([key]) => key === positionKey);
-    if (index >= 0) {
-      buttonsArray.splice(index + 1, 0, [buttonId, newButton]);
-    } else {
-      buttonsArray.push([buttonId, newButton]);
-    }
+if (!botActive && msg.from.id !== adminId) {
+    return bot.sendMessage(msg.from.id, "ربات موقتاً خاموش است.");
   }
-
-  const updatedButtons = Object.fromEntries(buttonsArray);
-  await set(ref(db, 'dynamic_buttons'), updatedButtons);
-
-  await bot.sendMessage(userId, '✅ دکمه ذخیره شد و به منوی کاربران اضافه شد.');
-  userState[userId] = null;
-  return;
-}
-  
-  if (userState[userId]?.step === 'await_button_response_text') {
-  const { positionKey, buttonText, responseType } = userState[userId];
-  const responseText = msg.text;
-  const buttonId = Date.now(); // یا uuid
-
-  const newButton = {
-    id: buttonId,
-    text: buttonText,
-    responseType,
-    responseText
-  };
-
-  const snapshot = await get(ref(db, 'dynamic_buttons'));
-  const existingButtons = snapshot.exists() ? snapshot.val() : {};
-
-  let buttonsArray = Object.entries(existingButtons);
-
-  if (positionKey === 'end') {
-    buttonsArray.push([buttonId, newButton]);
-  } else {
-    const index = buttonsArray.findIndex(([key]) => key === positionKey);
-    if (index >= 0) {
-      buttonsArray.splice(index + 1, 0, [buttonId, newButton]);
-    } else {
-      buttonsArray.push([buttonId, newButton]);
-    }
-  }
-
-  const updatedButtons = Object.fromEntries(buttonsArray);
-  await set(ref(db, 'dynamic_buttons'), updatedButtons);
-
-  await bot.sendMessage(userId, '✅ دکمه ذخیره شد و به منوی کاربران اضافه شد.');
-  userState[userId] = null;
-  return;
-}
   
   if (user?.banned) {
     return bot.sendMessage(userId, 'شما بن شده‌اید و اجازه استفاده ندارید.');
   }
+  
+  if (userId === adminId && userState[userId]?.step?.startsWith('dynbtn')) {
+  await handleDynamicButtonsMessage(bot, db, msg, userState);
+  return;
+}
 
   // ---- پاسخ به پشتیبانی توسط ادمین ----
   if (msg.reply_to_message && userId === adminId) {
@@ -1058,20 +954,20 @@ bot.on('message', async (msg) => {
       const losses = state.total - wins;
       await updatePoints(userId, -1);
       userState[userId] = null;
-      bot.sendMessage(userId, `برد: ${wins} | باخت: ${losses}\nامتیاز باقی‌مانده: ${user.points - 1}`);
-      sendMainMenu(userId);
+     await bot.sendMessage(userId, `برد: ${wins} | باخت: ${losses}\nامتیاز باقی‌مانده: ${user.points - 1}`);
+     await sendMainMenu(userId);
     }
   }
-  if (state.step === 'target') {
+if (state.step === 'target') {
     const target = parseFloat(text);
     if (isNaN(target) || target < 0 || target > 100) return bot.sendMessage(userId, 'ریت هدف را به صورت عدد بین 0 تا 100 وارد کن.');
     const currentWins = (state.total * state.rate) / 100;
     const neededWins = Math.ceil(((target / 100 * state.total) - currentWins) / (1 - target / 100));
     await updatePoints(userId, -1);
     userState[userId] = null;
-    bot.sendMessage(userId, `برای رسیدن به ${target}% باید ${neededWins} بازی متوالی ببری.\nامتیاز باقی‌مانده: ${user.points - 1}`);
-    sendMainMenu(userId);
-  }
+    await bot.sendMessage(userId, `برای رسیدن به ${target}% باید ${neededWins} بازی متوالی ببری.\nامتیاز باقی‌مانده: ${user.points - 1}`);
+    await sendMainMenu(userId);
+}
   if (state.step === 'support') {
     if (msg.message_id && text.length > 0) {
       try {
@@ -1090,8 +986,8 @@ bot.on('message', async (msg) => {
       await deleteGiftCode(code);
       await updatePoints(userId, points);
       userState[userId] = null;
-      bot.sendMessage(userId, `تبریک! کد با موفقیت فعال شد و ${points} امتیاز به حساب شما افزوده شد.`);
-      sendMainMenu(userId);
+     await bot.sendMessage(userId, `تبریک! کد با موفقیت فعال شد و ${points} امتیاز به حساب شما افزوده شد.`);
+     await sendMainMenu(userId);
       return;
     }
     const globalGift = await getGlobalGiftCode(code);
@@ -1104,8 +1000,8 @@ bot.on('message', async (msg) => {
       await addUserToGlobalGiftCode(code, userId);
       await updatePoints(userId, globalGift.points);
       userState[userId] = null;
-      bot.sendMessage(userId, `کد همگانی فعال شد و ${globalGift.points} امتیاز به حساب شما اضافه شد.`);
-      sendMainMenu(userId);
+     await bot.sendMessage(userId, `کد همگانی فعال شد و ${globalGift.points} امتیاز به حساب شما اضافه شد.`);
+     await sendMainMenu(userId);
       return;
     }
     userState[userId] = null;
@@ -1155,8 +1051,7 @@ bot.on('message', async (msg) => {
 });
 
 // ---- نمایش کارت اسکواد با ورق‌زنی (عمومی) ----
- // ---- نمایش کارت اسکواد با ورق‌زنی (عمومی) ----
-function showSquadCard(userId, reqs, idx, messageId) {
+async function showSquadCard(userId, reqs, idx, messageId) {
   if (reqs.length === 0) {
     if (messageId) {
       return bot.editMessageText('هیچ اسکوادی وجود ندارد.', {
@@ -1181,7 +1076,7 @@ function showSquadCard(userId, reqs, idx, messageId) {
   if (idx < 0) idx = 0;
   if (idx >= reqs.length) idx = reqs.length - 1;
   const req = reqs[idx];
-  let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: ${req.roles_needed}\n👤آیدی تاگرام لیدر: ${req.game_id || '-'}\n🏅رنک: ${req.min_rank}\n📝توضیحات: ${req.details}\n`;
+let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: ${req.roles_needed}\n👤آیدی تاگرام لیدر: ${req.game_id || '-'}\n🏅رنک: ${req.min_rank}\n📝توضیحات: ${req.details}\n`;
   txt += `\n🖌️درخواست‌دهنده: ${req.user_id}`;
   let buttons = [];
   if (reqs.length > 1) {
@@ -1257,5 +1152,7 @@ let txt = `🎯 اسکواد: ${req.squad_name}\n🎭نقش مورد نیاز: $
 }
 
 app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
-});
+    console.log(`Server is running on port ${port}`);
+  });
+
+})();
