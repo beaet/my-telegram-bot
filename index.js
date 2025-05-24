@@ -25,7 +25,6 @@ const firebaseApp = initializeApp(firebaseConfig);
 const db = getDatabase(firebaseApp);
 
 // ---- User Helper Functions ----
-bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
 const userRef = userId => ref(db, `users/${userId}`);
 async function ensureUser(user) {
   const snap = await get(userRef(user.id));
@@ -41,6 +40,7 @@ async function ensureUser(user) {
     });
   }
 }
+
 async function getUser(userId) {
   const snap = await get(userRef(userId));
   return snap.exists() ? snap.val() : null;
@@ -276,6 +276,8 @@ async function sendMainMenu(userId, messageId = null, currentText = null, curren
 }
 
 // ---- /start with referral ----
+
+bot.onText(/\/start(?: (\d+))?/, async (msg, match) => {
   const userId = msg.from.id;
   const refId = match[1] ? parseInt(match[1]) : null;
   
