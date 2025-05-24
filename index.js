@@ -3,7 +3,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const { initializeApp } = require('firebase/app');
 const { getDatabase, ref, set, get, update, remove, push } = require('firebase/database');
-const { showDynamicButtonsPanel, handleDynamicButtonsCallback, handleDynamicButtonsMessage } = require('./dynamic_buttons_manager');
+const { showDynamicButtonsPanel } = require('./dynamic_buttons_manager');
 const app = express();
 
 const token = process.env.BOT_TOKEN;
@@ -362,6 +362,73 @@ if (data === 'dynamic_buttons_panel' && userId === adminId) {
   await showDynamicButtonsPanel(bot, db, userId);
   return;
 }
+
+if (data === 'dynbtn_add_row' && userId === adminId) {
+  const snapshot = await get(ref(db, 'dynamic_buttons'));
+  let buttons = snapshot.exists() ? snapshot.val() : [];
+  buttons.push([]);
+  await set(ref(db, 'dynamic_buttons'), buttons);
+  await bot.answerCallbackQuery(query.id, { text: 'ردیف جدید افزوده شد.' });
+  await showDynamicButtonsPanel(bot, db, userId);
+  return;
+}
+
+if (data === 'dynbtn_add' && userId === adminId) {
+  userState[userId] = { step: 'add_dynamic_btn_text' };
+  await bot.answerCallbackQuery(query.id);
+  await bot.sendMessage(userId, 'متن دکمه جدید را ارسال کنید:');
+  return;
+}
+
+if (data.startsWith('dynbtn_edit_') && userId === adminId) {
+  const [rowIdx, btnIdx] = data.replace('dynbtn_edit_', '').split('_').map(Number);
+  userState[userId] = { step: 'edit_dynamic_btn', rowIdx, btnIdx };
+  await bot.answerCallbackQuery(query.id);
+  await bot.sendMessage(userId, 'متن جدید دکمه را ارسال کنید:');
+  return;
+}
+
+if (data.startsWith('dynbtn_delete_') && userId === adminId) {
+  const [rowIdx, btnIdx] = data.replace('dynbtn_delete_', '').split('_').map(Number);
+  const snapshot = await get(ref(db, 'dynamic_buttons'));
+  let buttons = snapshot.exists() ? snapshot.val() : [];
+  if (buttons[rowIdx] && buttons[rowIdx][btnIdx]) {
+    buttons[rowIdx].splice(btnIdx, 1);
+    if (buttons[rowIdx].length === 0) buttons.splice(rowIdx, 1);
+    await set(ref(db, 'dynamic_buttons'), buttons);
+  }
+  await bot.answerCallbackQuery(query.id, { text: 'دکمه حذف شد.' });
+  await showDynamicButtonsPanel(bot, db, userId);
+  return;
+}
+
+if (data.startsWith('dynbtn_move_') && userId === adminId) {
+  const parts = data.replace('dynbtn_move_', '').split('_');
+  const rowIdx = Number(parts[0]);
+  const btnIdx = Number(parts[1]);
+  const direction = parts[2];
+  const snapshot = await get(ref(db, 'dynamic_buttons'));
+  let buttons = snapshot.exists() ? snapshot.val() : [];
+  let btn = buttons[rowIdx][btnIdx];
+  if (!btn) return;
+  if (direction === 'up' && rowIdx > 0) {
+    buttons[rowIdx].splice(btnIdx, 1);
+    buttons[rowIdx - 1].push(btn);
+  } else if (direction === 'down' && rowIdx < buttons.length - 1) {
+    buttons[rowIdx].splice(btnIdx, 1);
+    buttons[rowIdx + 1].push(btn);
+  } else if (direction === 'left' && btnIdx > 0) {
+    [buttons[rowIdx][btnIdx - 1], buttons[rowIdx][btnIdx]] = [buttons[rowIdx][btnIdx], buttons[rowIdx][btnIdx - 1]];
+  } else if (direction === 'right' && btnIdx < buttons[rowIdx].length - 1) {
+    [buttons[rowIdx][btnIdx + 1], buttons[rowIdx][btnIdx]] = [buttons[rowIdx][btnIdx], buttons[rowIdx][btnIdx + 1]];
+  }
+  buttons = buttons.filter(r => r.length > 0);
+  await set(ref(db, 'dynamic_buttons'), buttons);
+  await bot.answerCallbackQuery(query.id, { text: 'جابجایی انجام شد.' });
+  await showDynamicButtonsPanel(bot, db, userId);
+  return;
+}
+
 if (data.startsWith('dynbtn_user_')) {
   const btnId = data.replace('dynbtn_user_', '');
   const snapshot = await get(ref(db, 'dynamic_buttons'));
@@ -806,6 +873,39 @@ if (!botActive && msg.from.id !== adminId) {
   
   if (userId === adminId && userState[userId]?.step?.startsWith('dynbtn')) {
   await handleDynamicButtonsMessage(bot, db, msg, userState);
+  return;
+}
+
+// ساخت دکمه جدید
+if (userState[userId]?.step === 'add_dynamic_btn_text') {
+  const textBtn = msg.text.trim();
+  const snapshot = await get(ref(db, 'dynamic_buttons'));
+  let buttons = snapshot.exists() ? snapshot.val() : [];
+  if (buttons.length === 0) buttons.push([]);
+  const newBtn = {
+    id: Date.now(),
+    text: textBtn,
+    responseType: 'alert', // یا message
+    responseText: 'پاسخ پیش‌فرض'
+  };
+  buttons[buttons.length - 1].push(newBtn);
+  await set(ref(db, 'dynamic_buttons'), buttons);
+  userState[userId] = null;
+  await bot.sendMessage(userId, 'دکمه اضافه شد.');
+  await showDynamicButtonsPanel(bot, db, userId);
+  return;
+}
+
+// ویرایش متن دکمه
+if (userState[userId]?.step === 'edit_dynamic_btn') {
+  const { rowIdx, btnIdx } = userState[userId];
+  const snapshot = await get(ref(db, 'dynamic_buttons'));
+  let buttons = snapshot.exists() ? snapshot.val() : [];
+  buttons[rowIdx][btnIdx].text = msg.text.trim();
+  await set(ref(db, 'dynamic_buttons'), buttons);
+  userState[userId] = null;
+  await bot.sendMessage(userId, 'متن دکمه ویرایش شد.');
+  await showDynamicButtonsPanel(bot, db, userId);
   return;
 }
 
