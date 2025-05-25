@@ -861,7 +861,6 @@ if (!botActive && msg.from.id !== adminId) {
     }
   }
 
-let const state = userState[userId];
   if (!state) return;
   if (text === '/cancel') {
     userState[userId] = null;
