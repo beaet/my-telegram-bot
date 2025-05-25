@@ -96,34 +96,6 @@ async function addUserToGlobalGiftCode(code, userId) {
   await update(globalGiftCodeRef(code), { users_used });
   return true;
 }
-
-const userStates = new Map();
-const userTemp = new Map();
-
-async function setUserState(userId, state) {
-  userStates.set(userId, state);
-}
-
-async function getUserState(userId) {
-  return userStates.get(userId);
-}
-
-async function clearUserState(userId) {
-  userStates.delete(userId);
-}
-
-async function setUserTemp(userId, data) {
-  userTemp.set(userId, data);
-}
-
-async function getUserTemp(userId) {
-  return userTemp.get(userId) || {};
-}
-
-async function clearUserTemp(userId) {
-  userTemp.delete(userId);
-}
-
 async function deleteGlobalGiftCode(code) {
   await remove(globalGiftCodeRef(code));
 }
@@ -221,9 +193,6 @@ function mainMenuKeyboard() {
     [
       { text: '➕ ثبت درخواست اسکواد', callback_data: 'squad_request' },
       { text: '👥 مشاهده اسکوادها', callback_data: 'view_squads' }
-    ],
-    [
-          { text: 'اطلاعات بازیکن🪞, callback_data: 'get_mlbb_profile' }
     ],
     [
       { text: '💬پشتیبانی', callback_data: 'support' }
@@ -401,12 +370,6 @@ if (data === 'activate_bot' && userId === adminId) {
       return;
     }
   }
-  
-  if (data === 'get_mlbb_profile') {
-  await setUserState(userId, 'awaiting_uid');
-  await bot.sendMessage(userId, 'لطفاً آیدی بازی (UID) خود را وارد کنید:\n\nمثال: 123456789');
-  return;
-}
   
   if (data === 'tournament') {
   await bot.answerCallbackQuery(query.id);
@@ -1012,41 +975,6 @@ if (!botActive && msg.from.id !== adminId) {
     userState[userId] = null;
     return bot.sendMessage(userId, 'کد نامعتبر است یا منقضی شده است.');
   }
-  
-  const state = await getUserState(userId);
-if (state === 'awaiting_uid') {
-  const uid = message.text.trim();
-  await setUserTemp(userId, { uid }); // ذخیره موقتی UID
-  await setUserState(userId, 'awaiting_server');
-  await bot.sendMessage(userId, 'اکنون شماره سرور خود را وارد کنید:\n\nمثال: 1234');
-  return;
-}
-
-if (state === 'awaiting_server') {
-  const server = message.text.trim();
-  const { uid } = await getUserTemp(userId);
-  await clearUserState(userId);
-  await clearUserTemp(userId);
-
-  // تماس با API
-  try {
-    const res = await axios.get(`https://mlbb-x.vercel.app/api/profile`, {
-      params: { uid, server }
-    });
-
-    if (res.data.status !== 'success') {
-      return bot.sendMessage(userId, 'پروفایلی با این اطلاعات یافت نشد.');
-    }
-
-    const p = res.data.data;
-    const msg = `🏷️ نام: ${p.name}\n🆔 آیدی: ${p.user_id} (${p.server_id})\n🏆 رنک: ${p.rank}\n📊 وین‌ریت: ${p.win_rate}\n🎮 تعداد بازی‌ها: ${p.matches}`;
-    await bot.sendPhoto(userId, p.avatar, { caption: msg });
-  } catch (e) {
-    await bot.sendMessage(userId, 'خطا در دریافت اطلاعات. لطفاً بعداً تلاش کنید.');
-  }
-
-  return;
-}
 
   // ---- اداره مراحل ثبت اسکواد ----
   if (state.step === 'squad_name') {
