@@ -342,13 +342,21 @@ bot.onText(/\/panel/, async (msg) => {
 
 // ---- CALLBACK QUERIES ----
 bot.on('callback_query', async (query) => {
+  const userId = query.from.id;
+  const data = query.data;
+  // ...
+if (data === 'get_mlbb_profile') {
+    setUserState(userId, 'awaiting_mlbb_uid');
+    await bot.answerCallbackQuery(query.id);
+    await bot.sendMessage(userId, 'لطفاً آیدی بازی (UID) خود را وارد کنید:\n\nمثال: 123456789');
+    return;
+  }
+  // ... سایر کدها ...
   if (!botActive && query.from.id !== adminId) {
     await bot.answerCallbackQuery(query.id, { text: 'ربات موقتاً خاموش است.', show_alert: true });
     return;
   }
 
-  const userId = query.from.id;
-  const data = query.data;
   const messageId = query.message && query.message.message_id;
   const currentText = query.message.text;
   const currentMarkup = query.message.reply_markup || null;
@@ -423,19 +431,6 @@ if (data === 'challenge') {
         }
       }
     );
-  }
-  
-  bot.on('callback_query', async (query) => {
-  const userId = query.from.id;
-  const data = query.data;
-
-  // ... سایر کدها ...
-
-  if (data === 'get_mlbb_profile') {
-    setUserState(userId, 'awaiting_mlbb_uid');
-    await bot.answerCallbackQuery(query.id);
-    await bot.sendMessage(userId, 'لطفاً آیدی بازی (UID) خود را وارد کنید:\n\nمثال: 123456789');
-    return;
   }
 
   // ... سایر کدها ...
@@ -791,22 +786,18 @@ if (data.startsWith('delete_squadreq_') && userId === adminId) {
 
 // ---- اداره مراحل ثبت اسکواد ----
 // ... ناحیه message handler بدون تغییر، فقط بخش stateهای جدید اضافه شود
+  
+ 
+
+  // ... سایر کدها ...
+
+  // مرحله ۱: دریافت UID
+
+  // مرحله ۲: دریافت شماره سرور و نمایش پروفایل
 bot.on('message', async (msg) => {
-  const userId = msg.from.id;
-  const text = msg.text || '';
-  if (!userState[userId] && userId !== adminId) return;
-  const user = await getUser(userId);
-  
-if (!botActive && msg.from.id !== adminId) {
-    return bot.sendMessage(msg.from.id, "ربات موقتاً خاموش است.");
-  }
-  
-  bot.on('message', async (msg) => {
   const userId = msg.from.id;
   const text = msg.text ? msg.text.trim() : '';
   const state = getUserState(userId);
-
-  // ... سایر کدها ...
 
   // مرحله ۱: دریافت UID
   if (state === 'awaiting_mlbb_uid') {
@@ -827,7 +818,6 @@ if (!botActive && msg.from.id !== adminId) {
     clearUserState(userId);
     clearUserTemp(userId);
 
-    // تماس با API و نمایش نتیجه
     try {
       const res = await axios.get('https://mlbb-x.vercel.app/api/profile', {
         params: { uid, server: text }
@@ -844,6 +834,15 @@ if (!botActive && msg.from.id !== adminId) {
     }
     return;
   }
+  // ... بقیه کدهای message
+  
+  if (!userState[userId] && userId !== adminId) return;
+  const user = await getUser(userId);
+  
+if (!botActive && msg.from.id !== adminId) {
+    return bot.sendMessage(msg.from.id, "ربات موقتاً خاموش است.");
+  }
+  
 
   // ... سایر کدها
   
@@ -859,6 +858,15 @@ if (!botActive && msg.from.id !== adminId) {
       await bot.sendMessage(targetUserId, `پاسخ پشتیبانی:\n${msg.text}`);
       return bot.sendMessage(adminId, '✅ پیام شما به کاربر ارسال شد.');
     }
+  }
+  
+   if (state === 'awaiting_mlbb_uid') {
+    if (!/^\d{6,}$/.test(text)) {
+      return bot.sendMessage(userId, 'آیدی بازی نامعتبر است. لطفاً فقط عدد UID را وارد کنید.');
+    }
+    setUserTemp(userId, { uid: text });
+    setUserState(userId, 'awaiting_mlbb_server');
+    return bot.sendMessage(userId, 'شماره سرور خود را وارد کنید:\n\nمثال: 1234');
   }
 
   if (!state) return;
