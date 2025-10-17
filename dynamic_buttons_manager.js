@@ -5,7 +5,6 @@ async function showDynamicButtonsPanel(bot, db, userId) {
   const snapshot = await get(ref(db, 'dynamic_buttons'));
   let buttons = snapshot.exists() ? snapshot.val() : [];
   if (!Array.isArray(buttons)) buttons = [];
-
   let inline_keyboard = [];
   buttons.forEach((row, rowIdx) => {
     let rowBtns = row.map((btn, btnIdx) => [
